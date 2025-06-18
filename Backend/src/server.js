@@ -34,7 +34,8 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    version: '1.0.0'
   });
 });
 
@@ -48,10 +49,14 @@ async function startServer() {
     // Importar rotas após conexão com banco
     const authRoutes = require('./routes/auth');
     const quadrasRoutes = require('./routes/quadras');
+    const clientesRoutes = require('./routes/clientes');
+    const reservasRoutes = require('./routes/reservas');
     
     // Configurar rotas da API
     app.use('/api/auth', authRoutes);
     app.use('/api/quadras', quadrasRoutes);
+    app.use('/api/clientes', clientesRoutes);
+    app.use('/api/reservas', reservasRoutes);
 
     // Middleware de tratamento de erros
     app.use((err, req, res, next) => {
@@ -75,8 +80,10 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`🚀 Servidor rodando na porta ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`🔐 Auth endpoint: http://localhost:${PORT}/api/auth/login`);
-      console.log(`🏟️  Quadras endpoint: http://localhost:${PORT}/api/quadras`);
+      console.log(`🔐 Auth: http://localhost:${PORT}/api/auth`);
+      console.log(`🏟️  Quadras: http://localhost:${PORT}/api/quadras`);
+      console.log(`👥 Clientes: http://localhost:${PORT}/api/clientes`);
+      console.log(`📅 Reservas: http://localhost:${PORT}/api/reservas`);
     });
   } catch (error) {
     console.error('❌ Erro ao iniciar servidor:', error);

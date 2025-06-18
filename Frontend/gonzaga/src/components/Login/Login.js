@@ -112,7 +112,7 @@ const Login = () => {
           <Box textAlign="center" mb={3}>
             <Sports sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
             <Typography variant="h4" component="h1" gutterBottom>
-              Sistema de Quadras
+             Complexo Gonzaga
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Gerenciamento de Quadras Esportivas

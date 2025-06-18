@@ -11,6 +11,7 @@
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.14.19",
     "@mui/x-date-pickers": "^6.18.3",
+    "@mui/lab": "^5.0.0-alpha.155",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.1",
@@ -25,7 +26,8 @@
     "eject": "react-scripts eject",
     "electron": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
     "electron-dev": "ELECTRON_IS_DEV=true electron .",
-    "build-electron": "npm run build && electron-builder"
+    "build-electron": "npm run build && electron-builder",
+    "install-deps": "npm install @mui/x-date-pickers @mui/lab"
   },
   "devDependencies": {
     "react-scripts": "5.0.1",

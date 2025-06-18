@@ -21,7 +21,7 @@ api.interceptors.request.use(
   }
 );
 
-// Interceptor para respostas
+// Interceptor para respostas - detectar se usuário foi desconectado
 api.interceptors.response.use(
   (response) => {
     console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
@@ -29,11 +29,21 @@ api.interceptors.response.use(
   },
   (error) => {
     console.error(`❌ ${error.config?.method?.toUpperCase()} ${error.config?.url} - ${error.response?.status}`);
+    
+    // Se receber 401 ou 403, pode ser que a sessão expirou
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      const currentAuth = localStorage.getItem('quadras_auth');
+      if (currentAuth) {
+        console.warn('Possível expiração de sessão detectada');
+        // Aqui você poderia forçar logout, mas vamos deixar o AuthContext gerenciar
+      }
+    }
+    
     return Promise.reject(error);
   }
 );
 
-// Serviços de autenticação
+// Resto dos serviços permanecem iguais...
 export const authService = {
   async login(pin) {
     try {
@@ -102,6 +112,161 @@ export const quadrasService = {
   }
 };
 
+// Serviços de clientes
+export const clientesService = {
+  async getAll(search = '') {
+    try {
+      const url = search ? `/clientes?search=${encodeURIComponent(search)}` : '/clientes';
+      const response = await api.get(url);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async getById(id) {
+    try {
+      const response = await api.get(`/clientes/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async create(clienteData) {
+    try {
+      const response = await api.post('/clientes', clienteData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async update(id, clienteData) {
+    try {
+      const response = await api.put(`/clientes/${id}`, clienteData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async delete(id) {
+    try {
+      const response = await api.delete(`/clientes/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async getHistorico(id) {
+    try {
+      const response = await api.get(`/clientes/${id}/historico`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  }
+};
+
+// Serviços de reservas
+export const reservasService = {
+  async getAll(filtros = {}) {
+    try {
+      const params = new URLSearchParams();
+      Object.keys(filtros).forEach(key => {
+        if (filtros[key]) params.append(key, filtros[key]);
+      });
+      
+      const url = params.toString() ? `/reservas?${params}` : '/reservas';
+      const response = await api.get(url);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async getById(id) {
+    try {
+      const response = await api.get(`/reservas/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async create(reservaData) {
+    try {
+      const response = await api.post('/reservas', reservaData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async update(id, reservaData) {
+    try {
+      const response = await api.put(`/reservas/${id}`, reservaData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async cancelar(id, motivo = '') {
+    try {
+      const response = await api.delete(`/reservas/${id}`, {
+        data: { motivo }
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async getCalendarioQuadra(quadraId, dataInicio, dataFim) {
+    try {
+      const params = new URLSearchParams();
+      if (dataInicio) params.append('data_inicio', dataInicio);
+      if (dataFim) params.append('data_fim', dataFim);
+      
+      const url = `/reservas/quadra/${quadraId}/calendario?${params}`;
+      const response = await api.get(url);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async getHoje() {
+    try {
+      const response = await api.get('/reservas/especiais/hoje');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async getProximas(limite = 10) {
+    try {
+      const response = await api.get(`/reservas/especiais/proximas?limite=${limite}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  },
+
+  async verificarConflito(dadosReserva) {
+    try {
+      const response = await api.post('/reservas/verificar-conflito', dadosReserva);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { success: false, message: 'Erro de conexão' };
+    }
+  }
+};
+
 // Serviço para health check
 export const healthService = {
   async check() {
@@ -115,4 +280,3 @@ export const healthService = {
 };
 
 export default api;
-
