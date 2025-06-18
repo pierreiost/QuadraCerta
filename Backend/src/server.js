@@ -5,12 +5,6 @@ const morgan = require('morgan');
 const compression = require('compression');
 const path = require('path');
 
-const database = require('./config/database');
-
-// Importar rotas
-const authRoutes = require('./routes/auth');
-const quadrasRoutes = require('./routes/quadras');
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -35,11 +29,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rotas da API
-app.use('/api/auth', authRoutes);
-app.use('/api/quadras', quadrasRoutes);
-
-// Rota de health check
+// Rota de health check (antes de conectar ao banco)
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -48,35 +38,45 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Middleware de tratamento de erros
-app.use((err, req, res, next) => {
-  console.error('Erro na aplicação:', err);
-  res.status(500).json({ 
-    success: false, 
-    message: 'Erro interno do servidor',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Middleware para rotas não encontradas
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'Rota não encontrada' 
-  });
-});
-
 // Inicializar servidor
 async function startServer() {
   try {
-    // Conectar ao banco de dados
+    // Conectar ao banco de dados primeiro
+    const database = require('./config/database');
     await database.connect();
+    
+    // Importar rotas após conexão com banco
+    const authRoutes = require('./routes/auth');
+    const quadrasRoutes = require('./routes/quadras');
+    
+    // Configurar rotas da API
+    app.use('/api/auth', authRoutes);
+    app.use('/api/quadras', quadrasRoutes);
+
+    // Middleware de tratamento de erros
+    app.use((err, req, res, next) => {
+      console.error('Erro na aplicação:', err);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Erro interno do servidor',
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    // Middleware para rotas não encontradas
+    app.use('*', (req, res) => {
+      res.status(404).json({ 
+        success: false, 
+        message: 'Rota não encontrada' 
+      });
+    });
     
     // Iniciar servidor
     app.listen(PORT, () => {
       console.log(`🚀 Servidor rodando na porta ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`🔐 Auth endpoint: http://localhost:${PORT}/api/auth`);
+      console.log(`🔐 Auth endpoint: http://localhost:${PORT}/api/auth/login`);
+      console.log(`🏟️  Quadras endpoint: http://localhost:${PORT}/api/quadras`);
     });
   } catch (error) {
     console.error('❌ Erro ao iniciar servidor:', error);
@@ -87,12 +87,14 @@ async function startServer() {
 // Tratamento de sinais para encerramento graceful
 process.on('SIGINT', () => {
   console.log('\n🛑 Encerrando servidor...');
+  const database = require('./config/database');
   database.close();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Encerrando servidor...');
+  const database = require('./config/database');
   database.close();
   process.exit(0);
 });
