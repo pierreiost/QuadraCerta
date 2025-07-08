@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-// Configuração base da API
 const api = axios.create({
-  baseURL: 'https://localhost:3001/api',
+  baseURL: 'https://abc123.ngrok.io/api',  // ← URL do ngrok
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
