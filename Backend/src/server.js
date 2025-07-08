@@ -8,6 +8,11 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// CORS mais permissivo para produção
+app.use(cors({
+  origin: true, // Permite qualquer origem
+  credentials: true
+}));
 // Middlewares de segurança e performance
 app.use(helmet());
 app.use(compression());
