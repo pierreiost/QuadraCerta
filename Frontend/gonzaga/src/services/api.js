@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Configuração base da API
 const api = axios.create({
-  baseURL: 'https://gonzaga-api-production.up.railway.app/api',
+  baseURL: 'https://localhost:3001/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
