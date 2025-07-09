@@ -22,11 +22,16 @@ app.use(morgan('combined'));
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://complexo-esportivo-gonzaga-m5gjp3nz5.vercel.app',  // ← Sua URL do Vercel
-    'https:/complexogonzaga.app'  // ← Qualquer subdomínio Vercel
+    'https://complexo-esportivo-gonzaga.vercel.app',  // ← Sua URL do Vercel
+    'https://*.vercel.app'
   ],
   credentials: true
 }));
+
+// Servidor escutar em todas as interfaces
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+});
 
 // Middleware para parsing
 app.use(express.json({ limit: '10mb' }));

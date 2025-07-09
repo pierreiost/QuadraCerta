@@ -1,9 +1,5 @@
 [build]
-command = "npm install && cd backend && npm install"
+command = "cd backend && npm install"
 
 [deploy]
 startCommand = "cd backend && npm start"
-
-[env]
-NODE_ENV = "production"
-PORT = "3001"
