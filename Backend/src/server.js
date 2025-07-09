@@ -20,7 +20,11 @@ app.use(morgan('combined'));
 
 // CORS - permitir apenas frontend local
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: [
+    'http://localhost:3000',
+    'https://complexo-esportivo-gonzaga-m5gjp3nz5.vercel.app',  // ← Sua URL do Vercel
+    'https:/complexogonzaga.app'  // ← Qualquer subdomínio Vercel
+  ],
   credentials: true
 }));
 
