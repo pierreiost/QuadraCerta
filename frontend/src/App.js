@@ -4,6 +4,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Courts from './pages/Courts';
+import Clients from './pages/Clients';
+import Reservations from './pages/Reservations';
 import './styles/App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -60,6 +63,46 @@ function App() {
             element={
               <PrivateRoute>
                 <Dashboard />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/courts" 
+            element={
+              <PrivateRoute>
+                <Courts />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/courts/:id" 
+            element={
+              <PrivateRoute>
+                <Courts />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/clients" 
+            element={
+              <PrivateRoute>
+                <Clients />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/reservations" 
+            element={
+              <PrivateRoute>
+                <Reservations />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/agenda" 
+            element={
+              <PrivateRoute>
+                <Reservations />
               </PrivateRoute>
             } 
           />

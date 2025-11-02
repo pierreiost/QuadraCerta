@@ -44,3 +44,6 @@ Thumbs.db
 # --- Outros ---
 .cache/
 coverage/
+
+API.md
+INSTALL.md

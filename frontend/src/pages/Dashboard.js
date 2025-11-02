@@ -4,12 +4,11 @@ import Header from '../components/Header';
 import { 
   Calendar, 
   Users, 
-  BarChart3, 
   PlusCircle,
   MapPin,
   Clock,
-  DollarSign,
-  Package
+  Package,
+  Receipt
 } from 'lucide-react';
 import { dashboardService, courtService } from '../services/api';
 import { format } from 'date-fns';
@@ -119,7 +118,7 @@ const Dashboard = () => {
           <>
             {/* Cards de Estatísticas */}
             <div className="grid grid-4" style={{ marginBottom: '2rem' }}>
-              <div className="card">
+              <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/courts')}>
                 <div className="flex-between">
                   <div>
                     <p className="text-muted text-sm">Total de Quadras</p>
@@ -161,7 +160,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="card">
+              <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/clients')}>
                 <div className="flex-between">
                   <div>
                     <p className="text-muted text-sm">Clientes</p>
@@ -182,7 +181,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="card">
+              <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/reservations')}>
                 <div className="flex-between">
                   <div>
                     <p className="text-muted text-sm">Reservas Ativas</p>
@@ -204,11 +203,11 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Botões de Ação */}
+            {/* Botões de Ação Rápida */}
             <div className="grid grid-4" style={{ marginBottom: '2rem' }}>
               <button 
                 className="btn btn-primary"
-                onClick={() => navigate('/reservations/new')}
+                onClick={() => navigate('/reservations')}
                 style={{ width: '100%' }}
               >
                 <PlusCircle size={18} />
@@ -216,11 +215,11 @@ const Dashboard = () => {
               </button>
               <button 
                 className="btn btn-secondary"
-                onClick={() => navigate('/courts/new')}
+                onClick={() => navigate('/courts')}
                 style={{ width: '100%' }}
               >
-                <PlusCircle size={18} />
-                Nova Quadra
+                <MapPin size={18} />
+                Gerenciar Quadras
               </button>
               <button 
                 className="btn btn-outline"
@@ -232,7 +231,7 @@ const Dashboard = () => {
               </button>
               <button 
                 className="btn btn-outline"
-                onClick={() => navigate('/agenda')}
+                onClick={() => navigate('/reservations')}
                 style={{ width: '100%' }}
               >
                 <Calendar size={18} />
@@ -246,7 +245,7 @@ const Dashboard = () => {
                 <h3 className="text-xl font-bold">Quadras Cadastradas</h3>
                 <button 
                   className="btn btn-primary"
-                  onClick={() => navigate('/courts/new')}
+                  onClick={() => navigate('/courts')}
                 >
                   <PlusCircle size={18} />
                   Adicionar Quadra
@@ -258,7 +257,7 @@ const Dashboard = () => {
                   <p className="text-muted">Nenhuma quadra cadastrada ainda.</p>
                   <button 
                     className="btn btn-primary"
-                    onClick={() => navigate('/courts/new')}
+                    onClick={() => navigate('/courts')}
                     style={{ marginTop: '1rem' }}
                   >
                     Cadastrar Primeira Quadra
@@ -273,7 +272,7 @@ const Dashboard = () => {
                         key={court.id}
                         className="card"
                         style={{ cursor: 'pointer' }}
-                        onClick={() => navigate(`/courts/${court.id}`)}
+                        onClick={() => navigate('/courts')}
                       >
                         <div className="flex-between" style={{ marginBottom: '0.5rem' }}>
                           <h4 className="font-bold">{court.name}</h4>
@@ -310,7 +309,7 @@ const Dashboard = () => {
                 <p className="text-muted">Nenhuma reserva agendada.</p>
                 <button 
                   className="btn btn-primary"
-                  onClick={() => navigate('/reservations/new')}
+                  onClick={() => navigate('/reservations')}
                   style={{ marginTop: '1rem' }}
                 >
                   Criar Nova Reserva
@@ -351,7 +350,7 @@ const Dashboard = () => {
                             <button 
                               className="btn btn-outline"
                               style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
-                              onClick={() => navigate(`/reservations/${reservation.id}`)}
+                              onClick={() => navigate('/reservations')}
                             >
                               Ver Detalhes
                             </button>
