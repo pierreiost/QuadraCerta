@@ -78,7 +78,6 @@ const Dashboard = () => {
       <Header />
       
       <div className="container" style={{ padding: '2rem 1rem' }}>
-        {/* Tabs */}
         <div style={{ borderBottom: '2px solid var(--border-color)', marginBottom: '2rem' }}>
           <div className="flex" style={{ gap: '2rem' }}>
             <button
@@ -116,7 +115,6 @@ const Dashboard = () => {
 
         {activeTab === 'overview' && (
           <>
-            {/* Cards de Estatísticas */}
             <div className="grid grid-4" style={{ marginBottom: '2rem' }}>
               <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/courts')}>
                 <div className="flex-between">
@@ -135,27 +133,6 @@ const Dashboard = () => {
                     color: 'white'
                   }}>
                     <MapPin size={30} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="card">
-                <div className="flex-between">
-                  <div>
-                    <p className="text-muted text-sm">Disponíveis</p>
-                    <h3 className="text-2xl font-bold text-success">{stats?.courts.available || 0}</h3>
-                  </div>
-                  <div style={{ 
-                    width: '60px', 
-                    height: '60px', 
-                    background: 'linear-gradient(135deg, #10b981, #059669)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}>
-                    <Clock size={30} />
                   </div>
                 </div>
               </div>
@@ -201,9 +178,29 @@ const Dashboard = () => {
                   </div>
                 </div>
               </div>
+
+              <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/tabs')}>
+                <div className="flex-between">
+                  <div>
+                    <p className="text-muted text-sm">Comandas Abertas</p>
+                    <h3 className="text-2xl font-bold">{stats?.tabs || 0}</h3>
+                  </div>
+                  <div style={{ 
+                    width: '60px', 
+                    height: '60px', 
+                    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white'
+                  }}>
+                    <Receipt size={30} />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Botões de Ação Rápida */}
             <div className="grid grid-4" style={{ marginBottom: '2rem' }}>
               <button 
                 className="btn btn-primary"
@@ -215,11 +212,19 @@ const Dashboard = () => {
               </button>
               <button 
                 className="btn btn-secondary"
-                onClick={() => navigate('/courts')}
+                onClick={() => navigate('/tabs')}
                 style={{ width: '100%' }}
               >
-                <MapPin size={18} />
-                Gerenciar Quadras
+                <Receipt size={18} />
+                Nova Comanda
+              </button>
+              <button 
+                className="btn btn-outline"
+                onClick={() => navigate('/products')}
+                style={{ width: '100%' }}
+              >
+                <Package size={18} />
+                Produtos
               </button>
               <button 
                 className="btn btn-outline"
@@ -227,19 +232,10 @@ const Dashboard = () => {
                 style={{ width: '100%' }}
               >
                 <Users size={18} />
-                Gerenciar Clientes
-              </button>
-              <button 
-                className="btn btn-outline"
-                onClick={() => navigate('/reservations')}
-                style={{ width: '100%' }}
-              >
-                <Calendar size={18} />
-                Ver Agenda
+                Clientes
               </button>
             </div>
 
-            {/* Quadras Disponíveis */}
             <div className="card">
               <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
                 <h3 className="text-xl font-bold">Quadras Cadastradas</h3>
@@ -366,7 +362,6 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* Footer */}
       <footer style={{
         background: 'white',
         borderTop: '1px solid var(--border-color)',

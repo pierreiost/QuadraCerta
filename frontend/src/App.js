@@ -1,3 +1,5 @@
+// frontend/src/App.js
+
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -7,6 +9,9 @@ import Dashboard from './pages/Dashboard';
 import Courts from './pages/Courts';
 import Clients from './pages/Clients';
 import Reservations from './pages/Reservations';
+import Products from './pages/Products';
+import Tabs from './pages/Tabs';
+import TabDetails from './pages/TabDetails';
 import './styles/App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -103,6 +108,30 @@ function App() {
             element={
               <PrivateRoute>
                 <Reservations />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/products" 
+            element={
+              <PrivateRoute>
+                <Products />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/tabs" 
+            element={
+              <PrivateRoute>
+                <Tabs />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/tabs/:id" 
+            element={
+              <PrivateRoute>
+                <TabDetails />
               </PrivateRoute>
             } 
           />
