@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuários
+model User {
+  id            String   @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String   @unique
+  password      String
+  cpf           String?
+  cnpj          String?
+  phone         String
+  role          Role     @default(ADMIN)
+  complexId     String?
+  complex       Complex? @relation(fields: [complexId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("users")
+}
+
+// Modelo de Complexo Esportivo
+model Complex {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  cnpj        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  users       User[]
+  courts      Court[]
+  clients     Client[]
+  products    Product[]
+  
+  @@map("complexes")
+}
+
+// Modelo de Quadras
+model Court {
+  id          String       @id @default(uuid())
+  name        String
+  sportType   String
+  capacity    Int
+  pricePerHour Float
+  description String?
+  status      CourtStatus  @default(AVAILABLE)
+  complexId   String
+  complex     Complex      @relation(fields: [complexId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  reservations Reservation[]
+  
+  @@map("courts")
+}
+
+// Modelo de Clientes
+model Client {
+  id          String   @id @default(uuid())
+  fullName    String
+  phone       String
+  email       String?
+  cpf         String?
+  complexId   String
+  complex     Complex  @relation(fields: [complexId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  reservations Reservation[]
+  tabs         Tab[]
+  
+  @@map("clients")
+}
+
+// Modelo de Reservas
+model Reservation {
+  id              String            @id @default(uuid())
+  courtId         String
+  court           Court             @relation(fields: [courtId], references: [id])
+  clientId        String
+  client          Client            @relation(fields: [clientId], references: [id])
+  startTime       DateTime
+  endTime         DateTime
+  status          ReservationStatus @default(CONFIRMED)
+  isRecurring     Boolean           @default(false)
+  recurringGroupId String?
+  recurringGroup  RecurringGroup?   @relation(fields: [recurringGroupId], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  tabs            Tab[]
+  
+  @@map("reservations")
+}
+
+// Modelo de Grupo de Recorrência
+model RecurringGroup {
+  id            String   @id @default(uuid())
+  frequency     String   // WEEKLY, MONTHLY
+  dayOfWeek     Int?     // 0-6 (domingo a sábado)
+  startDate     DateTime
+  endDate       DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  reservations  Reservation[]
+  
+  @@map("recurring_groups")
+}
+
+// Modelo de Produtos
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  stock       Int      @default(0)
+  unit        String   // UNIDADE, LITRO, KG
+  expiryDate  DateTime?
+  complexId   String
+  complex     Complex  @relation(fields: [complexId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  tabItems    TabItem[]
+  stockMovements StockMovement[]
+  
+  @@map("products")
+}
+
+// Modelo de Movimentação de Estoque
+model StockMovement {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  type        String   // ENTRADA, SAIDA
+  quantity    Int
+  reason      String?
+  createdAt   DateTime @default(now())
+  
+  @@map("stock_movements")
+}
+
+// Modelo de Comandas
+model Tab {
+  id            String      @id @default(uuid())
+  clientId      String
+  client        Client      @relation(fields: [clientId], references: [id])
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+  total         Float       @default(0)
+  status        TabStatus   @default(OPEN)
+  paidAt        DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  items         TabItem[]
+  
+  @@map("tabs")
+}
+
+// Modelo de Itens da Comanda
+model TabItem {
+  id          String   @id @default(uuid())
+  tabId       String
+  tab         Tab      @relation(fields: [tabId], references: [id])
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  description String
+  quantity    Int
+  unitPrice   Float
+  total       Float
+  createdAt   DateTime @default(now())
+  
+  @@map("tab_items")
+}
+
+// Enums
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  SEMI_ADMIN
+}
+
+enum CourtStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  PENDING
+  CANCELLED
+}
+
+enum TabStatus {
+  OPEN
+  PAID
+  CANCELLED
+}
