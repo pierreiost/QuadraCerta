@@ -3,9 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import { reservationService, courtService, clientService } from '../services/api';
-import { Calendar, Clock, PlusCircle, X, Edit2, Trash2, User, MapPin } from 'lucide-react';
+// --- CORREÇÃO: Removidos ícones não utilizados ---
+import { Trash2, PlusCircle, X, Calendar, Clock, User, MapPin } from 'lucide-react';
+// --- FIM DA CORREÇÃO ---
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+// ESTE ARQUIVO É O CORRETO PARA O FRONTEND
+// Ele não deve ter 'express', '@prisma/client' ou 'authMiddleware'
 
 const Reservations = () => {
   const [reservations, setReservations] = useState([]);
@@ -15,16 +20,18 @@ const Reservations = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedCourt, setSelectedCourt] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
+  
   const [formData, setFormData] = useState({
     courtId: '',
     clientId: '',
     startTime: '',
-    endTime: '',
+    durationInHours: 1, // Alterado de endTime para duration
     isRecurring: false,
     frequency: 'WEEKLY',
     dayOfWeek: '',
     endDate: ''
   });
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -64,7 +71,7 @@ const Reservations = () => {
       courtId: '',
       clientId: '',
       startTime: '',
-      endTime: '',
+      durationInHours: 1,
       isRecurring: false,
       frequency: 'WEEKLY',
       dayOfWeek: '',
@@ -80,7 +87,7 @@ const Reservations = () => {
       courtId: '',
       clientId: '',
       startTime: '',
-      endTime: '',
+      durationInHours: 1,
       isRecurring: false,
       frequency: 'WEEKLY',
       dayOfWeek: '',
@@ -357,6 +364,7 @@ const Reservations = () => {
                   </div>
                 </div>
 
+                {/* --- CAMPO "FIM" TROCADO POR "DURAÇÃO" --- */}
                 <div className="grid grid-2">
                   <div className="input-group">
                     <label htmlFor="startTime">Início *</label>
@@ -371,17 +379,20 @@ const Reservations = () => {
                   </div>
 
                   <div className="input-group">
-                    <label htmlFor="endTime">Fim *</label>
+                    <label htmlFor="durationInHours">Duração (em horas) *</label>
                     <input
-                      type="datetime-local"
-                      id="endTime"
-                      name="endTime"
-                      value={formData.endTime}
+                      type="number"
+                      id="durationInHours"
+                      name="durationInHours"
+                      value={formData.durationInHours}
                       onChange={handleInputChange}
                       required
+                      min="0.5"
+                      step="0.5"
                     />
                   </div>
                 </div>
+                {/* --- FIM DA ALTERAÇÃO --- */}
 
                 <div className="input-group">
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>

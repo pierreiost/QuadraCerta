@@ -12,6 +12,7 @@ import Reservations from './pages/Reservations';
 import Products from './pages/Products';
 import Tabs from './pages/Tabs';
 import TabDetails from './pages/TabDetails';
+import Profile from './pages/Profile'; // Importa a página de Perfil
 import './styles/App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -135,6 +136,17 @@ function App() {
               </PrivateRoute>
             } 
           />
+          
+          {/* Rota de perfil que adicionamos */}
+          <Route 
+            path="/profile" 
+            element={
+              <PrivateRoute>
+                <Profile />
+              </PrivateRoute>
+            } 
+          />
+
           <Route path="/" element={<Navigate to="/dashboard" />} />
           <Route path="*" element={<Navigate to="/dashboard" />} />
         </Routes>

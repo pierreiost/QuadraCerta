@@ -56,7 +56,6 @@ const Login = () => {
             QC
           </div>
           <h1 className="text-2xl font-bold">QuadraCerta</h1>
-          <p className="text-muted text-sm">Sistema de Gerenciamento de Complexos Esportivos</p>
         </div>
 
         {error && (

@@ -74,20 +74,22 @@ router.get('/:id', authMiddleware, async (req, res) => {
 // Criar nova reserva (avulsa ou recorrente)
 router.post('/', authMiddleware, async (req, res) => {
   try {
+    // --- ALTERAÇÃO: Recebe durationInHours no lugar de endTime ---
     const {
       courtId,
       clientId,
       startTime,
-      endTime,
+      durationInHours = 1, // Define 1 hora como padrão se não for enviado
       isRecurring,
       frequency,
       dayOfWeek,
       endDate
     } = req.body;
 
-    if (!courtId || !clientId || !startTime || !endTime) {
-      return res.status(400).json({ error: 'Campos obrigatórios não preenchidos.' });
+    if (!courtId || !clientId || !startTime) {
+      return res.status(400).json({ error: 'Campos obrigatórios (Quadra, Cliente, Início) não preenchidos.' });
     }
+    // --- FIM DA ALTERAÇÃO ---
 
     // Verificar se quadra pertence ao complexo
     const court = await prisma.court.findFirst({
@@ -107,9 +109,26 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Cliente não encontrado.' });
     }
 
+    // --- ALTERAÇÃO: Calcular endTime a partir da duração ---
     const start = new Date(startTime);
-    const end = new Date(endTime);
+    
+    const duration = parseFloat(durationInHours);
+    if (isNaN(duration) || duration <= 0) {
+      return res.status(400).json({ error: 'Duração da reserva inválida. Deve ser um número positivo.' });
+    }
+    
+    // Converte horas (ex: 1.5) para milissegundos
+    const durationInMilliseconds = duration * 60 * 60 * 1000;
+    const end = new Date(start.getTime() + durationInMilliseconds);
+    // --- FIM DA ALTERAÇÃO ---
 
+
+    // Verifica se a data de início da reserva é no passado
+    const now = new Date();
+    if (start < now) {
+      return res.status(400).json({ error: 'Não é permitido criar reservas em datas ou horários retroativos.' });
+    }
+    
     if (isRecurring) {
       // Criar grupo de recorrência
       const recurringGroup = await prisma.recurringGroup.create({
@@ -141,8 +160,9 @@ router.post('/', authMiddleware, async (req, res) => {
               },
               {
                 AND: [
-                  { startTime: { lt: new Date(currentDate.getTime() + (end - start)) } },
-                  { endTime: { gte: new Date(currentDate.getTime() + (end - start)) } }
+                  // (end - start) agora é a duração em milissegundos
+                  { startTime: { lt: new Date(currentDate.getTime() + durationInMilliseconds) } },
+                  { endTime: { gte: new Date(currentDate.getTime() + durationInMilliseconds) } }
                 ]
               }
             ]
@@ -154,7 +174,7 @@ router.post('/', authMiddleware, async (req, res) => {
             courtId,
             clientId,
             startTime: new Date(currentDate),
-            endTime: new Date(currentDate.getTime() + (end - start)),
+            endTime: new Date(currentDate.getTime() + durationInMilliseconds), // Usa a duração
             isRecurring: true,
             recurringGroupId: recurringGroup.id,
             status: 'CONFIRMED'
@@ -207,7 +227,7 @@ router.post('/', authMiddleware, async (req, res) => {
           courtId,
           clientId,
           startTime: start,
-          endTime: end,
+          endTime: end, // Usa o 'end' calculado
           isRecurring: false,
           status: 'CONFIRMED'
         },
@@ -228,7 +248,8 @@ router.post('/', authMiddleware, async (req, res) => {
 // Atualizar reserva
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
-    const { startTime, endTime, status } = req.body;
+    // --- ALTERAÇÃO: Permite atualizar 'durationInHours' também ---
+    const { startTime, endTime, durationInHours, status } = req.body;
 
     const reservation = await prisma.reservation.findFirst({
       where: {
@@ -240,12 +261,26 @@ router.put('/:id', authMiddleware, async (req, res) => {
     if (!reservation) {
       return res.status(404).json({ error: 'Reserva não encontrada.' });
     }
+    
+    let newStartTime = startTime ? new Date(startTime) : reservation.startTime;
+    let newEndTime = endTime ? new Date(endTime) : reservation.endTime;
+
+    // Se a duração for enviada, ela tem prioridade sobre o endTime
+    if (durationInHours) {
+        const duration = parseFloat(durationInHours);
+        if (isNaN(duration) || duration <= 0) {
+          return res.status(400).json({ error: 'Duração inválida.' });
+        }
+        const durationInMilliseconds = duration * 60 * 60 * 1000;
+        newEndTime = new Date(newStartTime.getTime() + durationInMilliseconds);
+    }
+    // --- FIM DA ALTERAÇÃO ---
 
     const updatedReservation = await prisma.reservation.update({
       where: { id: req.params.id },
       data: {
-        startTime: startTime ? new Date(startTime) : undefined,
-        endTime: endTime ? new Date(endTime) : undefined,
+        startTime: newStartTime,
+        endTime: newEndTime,
         status
       },
       include: {

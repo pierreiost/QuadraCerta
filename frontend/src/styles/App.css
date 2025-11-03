@@ -261,6 +261,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -271,6 +272,7 @@ body {
     transform: translateY(20px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -286,7 +288,8 @@ table {
   border-collapse: collapse;
 }
 
-th, td {
+th,
+td {
   padding: 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
@@ -363,9 +366,114 @@ tr:hover {
 }
 
 @media (max-width: 768px) {
+
   .grid-2,
   .grid-3,
   .grid-4 {
     grid-template-columns: 1fr;
   }
+
+  .profile-link {
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s;
+  }
+
+  .profile-link:hover {
+    background-color: var(--bg-dark);
+  }
+
+  .react-calendar-dashboard {
+    width: 100% !important;
+    border: none !important;
+    font-family: inherit !important;
+    line-height: 1.5em !important;
+  }
+
+  .react-calendar-dashboard .react-calendar__navigation button {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-dark);
+  }
+
+  .react-calendar-dashboard .react-calendar__month-view__weekdays__weekday {
+    text-align: center;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-light);
+    padding-bottom: 0.5rem;
+  }
+
+  .react-calendar-dashboard .react-calendar__month-view__weekdays__weekday abbr {
+    text-decoration: none !important;
+  }
+
+  .react-calendar-dashboard .react-calendar__tile {
+    border: 2px solid transparent;
+    border-radius: 0.5rem;
+    background: var(--bg-dark);
+    font-weight: 500;
+    padding: 0.75rem 0.5rem;
+    transition: all 0.2s;
+  }
+
+  .react-calendar-dashboard .react-calendar__tile--now {
+    background: #e0f2fe;
+    color: #0c4a6e;
+  }
+
+  .react-calendar-dashboard .react-calendar__tile:hover,
+  .react-calendar-dashboard .react-calendar__tile:focus {
+    background: var(--border-color);
+  }
+
+  .react-calendar-dashboard .react-calendar__tile--active {
+    background: var(--primary-color) !important;
+    color: white !important;
+  }
+
+  .react-calendar-dashboard .reserved-day {
+    background-color: #d1fae5;
+    color: #065f46;
+    font-weight: 700;
+    border: 2px solid var(--primary-color);
+  }
+
+.fc .fc-button-primary {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}
+
+.fc .fc-button-primary:hover {
+  background-color: #059669 !important; 
+  border-color: #059669 !important;
+}
+
+.fc .fc-daygrid-day.fc-day-today {
+  background-color: #f0fdfa; 
+}
+
+.fc-event.event-confirmed {
+  background-color: var(--primary-color) !important;
+  border-color: #059669 !important;
+  color: white !important;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+}
+
+.fc-event.event-cancelled {
+  background-color: var(--text-light) !important;
+  border-color: #9ca3af !important;
+  color: white !important;
+  text-decoration: line-through;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+}
+
+.fc-event-title {
+  white-space: normal; 
+  font-weight: 500;
+}
 }

@@ -100,7 +100,7 @@ router.post('/', authMiddleware, async (req, res) => {
     const tab = await prisma.tab.create({
       data: {
         clientId,
-        reservationId,
+        reservationId: reservationId || undefined, // Esta linha foi alterada
         status: 'OPEN'
       },
       include: {
@@ -147,7 +147,7 @@ router.post('/:id/items', authMiddleware, async (req, res) => {
     const item = await prisma.tabItem.create({
       data: {
         tabId: tab.id,
-        productId,
+        productId: productId || undefined,
         description,
         quantity: qty,
         unitPrice: price,
