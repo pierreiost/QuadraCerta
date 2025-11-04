@@ -1,16 +1,9 @@
-// frontend/src/pages/Reservations.js
-
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import { reservationService, courtService, clientService } from '../services/api';
-// --- CORREÇÃO: Removidos ícones não utilizados ---
-import { Trash2, PlusCircle, X, Calendar, Clock, User, MapPin } from 'lucide-react';
-// --- FIM DA CORREÇÃO ---
-import { format } from 'date-fns';
+import { Trash2, PlusCircle, X, Calendar, Clock, User, MapPin, RefreshCw } from 'lucide-react';
+import { format, addHours, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-// ESTE ARQUIVO É O CORRETO PARA O FRONTEND
-// Ele não deve ter 'express', '@prisma/client' ou 'authMiddleware'
 
 const Reservations = () => {
   const [reservations, setReservations] = useState([]);
@@ -25,7 +18,7 @@ const Reservations = () => {
     courtId: '',
     clientId: '',
     startTime: '',
-    durationInHours: 1, // Alterado de endTime para duration
+    durationInHours: 1,
     isRecurring: false,
     frequency: 'WEEKLY',
     dayOfWeek: '',
@@ -67,10 +60,15 @@ const Reservations = () => {
   };
 
   const openModal = () => {
+    // Data atual + 1 hora, arredondada
+    const now = new Date();
+    const nextHour = new Date(now.setHours(now.getHours() + 1, 0, 0, 0));
+    const formattedDate = format(nextHour, "yyyy-MM-dd'T'HH:mm");
+
     setFormData({
       courtId: '',
       clientId: '',
-      startTime: '',
+      startTime: formattedDate,
       durationInHours: 1,
       isRecurring: false,
       frequency: 'WEEKLY',
@@ -100,18 +98,60 @@ const Reservations = () => {
     e.preventDefault();
     setError('');
 
+    // Validações frontend
+    if (!formData.courtId) {
+      setError('Selecione uma quadra');
+      return;
+    }
+
+    if (!formData.clientId) {
+      setError('Selecione um cliente');
+      return;
+    }
+
+    if (!formData.startTime) {
+      setError('Selecione data e horário de início');
+      return;
+    }
+
+    if (formData.durationInHours < 0.5 || formData.durationInHours > 12) {
+      setError('Duração deve ser entre 0.5 e 12 horas');
+      return;
+    }
+
+    if (formData.isRecurring && !formData.endDate) {
+      setError('Para reservas recorrentes, defina a data final');
+      return;
+    }
+
     try {
-      await reservationService.create(formData);
-      setSuccess('Reserva criada com sucesso!');
+      const response = await reservationService.create(formData);
+      
+      if (formData.isRecurring) {
+        setSuccess(`${response.data.createdReservations} reservas criadas com sucesso!`);
+      } else {
+        setSuccess('Reserva criada com sucesso!');
+      }
+      
       closeModal();
       loadData();
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 5000);
     } catch (error) {
-      setError(error.response?.data?.error || 'Erro ao criar reserva');
+      const errorMessage = error.response?.data?.error || 'Erro ao criar reserva';
+      setError(errorMessage);
+      
+      // Se houver conflito, mostrar detalhes
+      if (error.response?.data?.conflictWith) {
+        const conflict = error.response.data.conflictWith;
+        setError(
+          `Horário conflita com reserva de ${conflict.client} ` +
+          `(${format(parseISO(conflict.startTime), 'HH:mm')} - ${format(parseISO(conflict.endTime), 'HH:mm')})`
+        );
+      }
     }
   };
 
-  const handleCancel = async (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Tem certeza que deseja cancelar esta reserva?')) {
       return;
     }
@@ -123,25 +163,35 @@ const Reservations = () => {
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.error || 'Erro ao cancelar reserva');
-      setTimeout(() => setError(''), 3000);
+      setTimeout(() => setError(''), 5000);
     }
   };
 
   const getStatusBadge = (status) => {
     const badges = {
-      CONFIRMED: { class: 'badge-success', text: 'Confirmada' },
-      PENDING: { class: 'badge-warning', text: 'Pendente' },
-      CANCELLED: { class: 'badge-danger', text: 'Cancelada' }
+      CONFIRMED: { text: 'Confirmada', class: 'badge-success' },
+      PENDING: { text: 'Pendente', class: 'badge-warning' },
+      CANCELLED: { text: 'Cancelada', class: 'badge-danger' }
     };
-    return badges[status] || badges.CONFIRMED;
+    return badges[status] || { text: status, class: 'badge-info' };
   };
 
-  const filteredReservations = reservations.filter(res => {
-    if (selectedCourt && res.courtId !== selectedCourt) return false;
-    if (selectedDate) {
-      const resDate = format(new Date(res.startTime), 'yyyy-MM-dd');
-      if (resDate !== selectedDate) return false;
+  // Calcular endTime baseado em startTime + duration
+  const calculateEndTime = () => {
+    if (!formData.startTime || !formData.durationInHours) return '';
+    
+    try {
+      const start = parseISO(formData.startTime);
+      const end = addHours(start, parseFloat(formData.durationInHours));
+      return format(end, 'HH:mm');
+    } catch {
+      return '';
     }
+  };
+
+  const filteredReservations = reservations.filter(reservation => {
+    if (selectedCourt && reservation.courtId !== selectedCourt) return false;
+    if (selectedDate && !reservation.startTime.startsWith(selectedDate)) return false;
     return true;
   });
 
@@ -149,8 +199,10 @@ const Reservations = () => {
     return (
       <>
         <Header />
-        <div className="flex-center" style={{ minHeight: '80vh' }}>
-          <div className="loading" style={{ width: '50px', height: '50px', borderWidth: '5px' }}></div>
+        <div className="container" style={{ marginTop: '2rem' }}>
+          <div className="flex-center" style={{ minHeight: '50vh' }}>
+            <div className="loading" style={{ width: '50px', height: '50px', borderWidth: '5px' }}></div>
+          </div>
         </div>
       </>
     );
@@ -159,12 +211,15 @@ const Reservations = () => {
   return (
     <>
       <Header />
-      
-      <div className="container" style={{ padding: '2rem 1rem' }}>
-        <div className="flex-between" style={{ marginBottom: '2rem' }}>
+      <div className="container" style={{ marginTop: '2rem' }}>
+        
+        {/* Header da Página */}
+        <div className="flex-between" style={{ marginBottom: '2rem', alignItems: 'flex-start' }}>
           <div>
-            <h1 className="text-2xl font-bold">Agenda de Reservas</h1>
-            <p className="text-muted">Gerencie todas as reservas do complexo</p>
+            <h1 className="font-bold text-2xl">Reservas</h1>
+            <p className="text-muted" style={{ marginTop: '0.5rem' }}>
+              Gerencie os agendamentos das quadras
+            </p>
           </div>
           <button className="btn btn-primary" onClick={openModal}>
             <PlusCircle size={18} />
@@ -172,18 +227,23 @@ const Reservations = () => {
           </button>
         </div>
 
-        {success && (
-          <div className="alert alert-success">{success}</div>
+        {/* Mensagens */}
+        {error && (
+          <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
+            {error}
+          </div>
         )}
 
-        {error && !showModal && (
-          <div className="alert alert-danger">{error}</div>
+        {success && (
+          <div className="alert alert-success" style={{ marginBottom: '1.5rem' }}>
+            {success}
+          </div>
         )}
 
         {/* Filtros */}
-        <div className="card" style={{ marginBottom: '2rem' }}>
-          <div className="grid grid-2">
-            <div className="input-group" style={{ marginBottom: 0 }}>
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="grid grid-3">
+            <div className="input-group">
               <label htmlFor="filterCourt">Filtrar por Quadra</label>
               <select
                 id="filterCourt"
@@ -191,13 +251,15 @@ const Reservations = () => {
                 onChange={(e) => setSelectedCourt(e.target.value)}
               >
                 <option value="">Todas as quadras</option>
-                {courts.map(court => (
-                  <option key={court.id} value={court.id}>{court.name}</option>
+                {courts.map((court) => (
+                  <option key={court.id} value={court.id}>
+                    {court.name}
+                  </option>
                 ))}
               </select>
             </div>
 
-            <div className="input-group" style={{ marginBottom: 0 }}>
+            <div className="input-group">
               <label htmlFor="filterDate">Filtrar por Data</label>
               <input
                 type="date"
@@ -206,14 +268,31 @@ const Reservations = () => {
                 onChange={(e) => setSelectedDate(e.target.value)}
               />
             </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <button
+                className="btn btn-outline"
+                onClick={() => {
+                  setSelectedCourt('');
+                  setSelectedDate('');
+                }}
+                style={{ width: '100%' }}
+              >
+                <RefreshCw size={18} />
+                Limpar Filtros
+              </button>
+            </div>
           </div>
         </div>
 
+        {/* Lista de Reservas */}
         {filteredReservations.length === 0 ? (
           <div className="card text-center" style={{ padding: '3rem' }}>
-            <Calendar size={64} style={{ margin: '0 auto 1rem', color: 'var(--text-light)' }} />
-            <h3 className="font-bold" style={{ marginBottom: '0.5rem' }}>
-              {selectedCourt || selectedDate ? 'Nenhuma reserva encontrada' : 'Nenhuma reserva cadastrada'}
+            <Calendar size={48} style={{ color: 'var(--text-light)', margin: '0 auto 1rem' }} />
+            <h3 className="font-bold text-lg" style={{ marginBottom: '0.5rem' }}>
+              {selectedCourt || selectedDate 
+                ? 'Nenhuma reserva encontrada' 
+                : 'Nenhuma reserva cadastrada'}
             </h3>
             <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
               {selectedCourt || selectedDate 
@@ -237,6 +316,7 @@ const Reservations = () => {
                     <th>Quadra</th>
                     <th>Data</th>
                     <th>Horário</th>
+                    <th>Duração</th>
                     <th>Status</th>
                     <th>Tipo</th>
                     <th>Ações</th>
@@ -245,6 +325,10 @@ const Reservations = () => {
                 <tbody>
                   {filteredReservations.map((reservation) => {
                     const statusBadge = getStatusBadge(reservation.status);
+                    const startTime = parseISO(reservation.startTime);
+                    const endTime = parseISO(reservation.endTime);
+                    const duration = (endTime - startTime) / (1000 * 60 * 60); // horas
+
                     return (
                       <tr key={reservation.id}>
                         <td>
@@ -260,13 +344,16 @@ const Reservations = () => {
                           </div>
                         </td>
                         <td>
-                          {format(new Date(reservation.startTime), "dd/MM/yyyy", { locale: ptBR })}
+                          {format(startTime, "dd/MM/yyyy", { locale: ptBR })}
                         </td>
                         <td>
                           <div className="flex" style={{ alignItems: 'center', gap: '0.5rem' }}>
                             <Clock size={14} style={{ color: 'var(--text-light)' }} />
-                            {format(new Date(reservation.startTime), "HH:mm", { locale: ptBR })} - {format(new Date(reservation.endTime), "HH:mm", { locale: ptBR })}
+                            {format(startTime, "HH:mm")} - {format(endTime, "HH:mm")}
                           </div>
+                        </td>
+                        <td>
+                          {duration}h
                         </td>
                         <td>
                           <span className={`badge ${statusBadge.class}`}>
@@ -282,12 +369,12 @@ const Reservations = () => {
                         </td>
                         <td>
                           {reservation.status !== 'CANCELLED' && (
-                            <button 
-                              className="btn btn-danger"
-                              style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
-                              onClick={() => handleCancel(reservation.id)}
+                            <button
+                              className="btn-icon"
+                              onClick={() => handleDelete(reservation.id)}
+                              title="Cancelar reserva"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={18} />
                             </button>
                           )}
                         </td>
@@ -299,165 +386,176 @@ const Reservations = () => {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="card" style={{ margin: 0 }}>
-              <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-                <h2 className="text-xl font-bold">Nova Reserva</h2>
-                <button 
-                  onClick={closeModal}
-                  style={{ 
-                    background: 'none', 
-                    border: 'none', 
-                    cursor: 'pointer',
-                    padding: '0.5rem'
-                  }}
-                >
+        {/* Modal de Nova Reserva */}
+        {showModal && (
+          <div className="modal-overlay" onClick={closeModal}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2 className="font-bold text-xl">Nova Reserva</h2>
+                <button onClick={closeModal} className="btn-icon">
                   <X size={24} />
                 </button>
               </div>
 
-              {error && (
-                <div className="alert alert-danger">{error}</div>
-              )}
-
-              <form onSubmit={handleSubmit}>
-                <div className="grid grid-2">
-                  <div className="input-group">
-                    <label htmlFor="courtId">Quadra *</label>
-                    <select
-                      id="courtId"
-                      name="courtId"
-                      value={formData.courtId}
-                      onChange={handleInputChange}
-                      required
-                    >
-                      <option value="">Selecione uma quadra</option>
-                      {courts.map(court => (
-                        <option key={court.id} value={court.id}>
-                          {court.name} - {court.sportType}
-                        </option>
-                      ))}
-                    </select>
+              <div className="modal-body">
+                {error && (
+                  <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+                    {error}
                   </div>
-
-                  <div className="input-group">
-                    <label htmlFor="clientId">Cliente *</label>
-                    <select
-                      id="clientId"
-                      name="clientId"
-                      value={formData.clientId}
-                      onChange={handleInputChange}
-                      required
-                    >
-                      <option value="">Selecione um cliente</option>
-                      {clients.map(client => (
-                        <option key={client.id} value={client.id}>
-                          {client.fullName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* --- CAMPO "FIM" TROCADO POR "DURAÇÃO" --- */}
-                <div className="grid grid-2">
-                  <div className="input-group">
-                    <label htmlFor="startTime">Início *</label>
-                    <input
-                      type="datetime-local"
-                      id="startTime"
-                      name="startTime"
-                      value={formData.startTime}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="input-group">
-                    <label htmlFor="durationInHours">Duração (em horas) *</label>
-                    <input
-                      type="number"
-                      id="durationInHours"
-                      name="durationInHours"
-                      value={formData.durationInHours}
-                      onChange={handleInputChange}
-                      required
-                      min="0.5"
-                      step="0.5"
-                    />
-                  </div>
-                </div>
-                {/* --- FIM DA ALTERAÇÃO --- */}
-
-                <div className="input-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      name="isRecurring"
-                      checked={formData.isRecurring}
-                      onChange={handleInputChange}
-                    />
-                    Reserva Recorrente
-                  </label>
-                </div>
-
-                {formData.isRecurring && (
-                  <>
-                    <div className="grid grid-2">
-                      <div className="input-group">
-                        <label htmlFor="frequency">Frequência</label>
-                        <select
-                          id="frequency"
-                          name="frequency"
-                          value={formData.frequency}
-                          onChange={handleInputChange}
-                        >
-                          <option value="WEEKLY">Semanal</option>
-                          <option value="MONTHLY">Mensal</option>
-                        </select>
-                      </div>
-
-                      <div className="input-group">
-                        <label htmlFor="endDate">Data Final</label>
-                        <input
-                          type="date"
-                          id="endDate"
-                          name="endDate"
-                          value={formData.endDate}
-                          onChange={handleInputChange}
-                        />
-                      </div>
-                    </div>
-                  </>
                 )}
 
-                <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
-                  <button 
-                    type="button" 
-                    className="btn btn-outline" 
-                    onClick={closeModal}
-                    style={{ flex: 1 }}
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    type="submit" 
-                    className="btn btn-primary"
-                    style={{ flex: 1 }}
-                  >
-                    Criar Reserva
-                  </button>
-                </div>
-              </form>
+                <form onSubmit={handleSubmit}>
+                  <div className="grid grid-2">
+                    <div className="input-group">
+                      <label htmlFor="courtId">Quadra *</label>
+                      <select
+                        id="courtId"
+                        name="courtId"
+                        value={formData.courtId}
+                        onChange={handleInputChange}
+                        required
+                      >
+                        <option value="">Selecione uma quadra</option>
+                        {courts.map((court) => (
+                          <option key={court.id} value={court.id}>
+                            {court.name} - {court.sportType} - R$ {court.pricePerHour}/h
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="input-group">
+                      <label htmlFor="clientId">Cliente *</label>
+                      <select
+                        id="clientId"
+                        name="clientId"
+                        value={formData.clientId}
+                        onChange={handleInputChange}
+                        required
+                      >
+                        <option value="">Selecione um cliente</option>
+                        {clients.map((client) => (
+                          <option key={client.id} value={client.id}>
+                            {client.fullName} - {client.phone}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-2">
+                    <div className="input-group">
+                      <label htmlFor="startTime">Início *</label>
+                      <input
+                        type="datetime-local"
+                        id="startTime"
+                        name="startTime"
+                        value={formData.startTime}
+                        onChange={handleInputChange}
+                        required
+                        min={format(new Date(), "yyyy-MM-dd'T'HH:mm")}
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label htmlFor="durationInHours">
+                        Duração (horas) *
+                        {calculateEndTime() && (
+                          <span style={{ color: 'var(--text-light)', fontWeight: 'normal', fontSize: '0.875rem', marginLeft: '0.5rem' }}>
+                            Término: {calculateEndTime()}
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        id="durationInHours"
+                        name="durationInHours"
+                        value={formData.durationInHours}
+                        onChange={handleInputChange}
+                        required
+                        min="0.5"
+                        max="12"
+                        step="0.5"
+                      />
+                      <small className="text-muted">Mínimo: 0.5h | Máximo: 12h</small>
+                    </div>
+                  </div>
+
+                  <div className="input-group">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        name="isRecurring"
+                        checked={formData.isRecurring}
+                        onChange={handleInputChange}
+                      />
+                      <span>Reserva Recorrente</span>
+                    </label>
+                    <small className="text-muted">Marque para criar reservas que se repetem semanalmente</small>
+                  </div>
+
+                  {formData.isRecurring && (
+                    <>
+                      <div className="grid grid-2">
+                        <div className="input-group">
+                          <label htmlFor="frequency">Frequência *</label>
+                          <select
+                            id="frequency"
+                            name="frequency"
+                            value={formData.frequency}
+                            onChange={handleInputChange}
+                            required={formData.isRecurring}
+                          >
+                            <option value="WEEKLY">Semanal</option>
+                            <option value="MONTHLY">Mensal</option>
+                          </select>
+                        </div>
+
+                        <div className="input-group">
+                          <label htmlFor="endDate">Data Final *</label>
+                          <input
+                            type="date"
+                            id="endDate"
+                            name="endDate"
+                            value={formData.endDate}
+                            onChange={handleInputChange}
+                            required={formData.isRecurring}
+                            min={formData.startTime ? format(parseISO(formData.startTime), 'yyyy-MM-dd') : ''}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="alert alert-info">
+                        <strong>Atenção:</strong> Serão criadas múltiplas reservas automaticamente até a data final escolhida.
+                        Horários já ocupados serão pulados.
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="btn btn-outline"
+                      style={{ flex: 1 }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      style={{ flex: 1 }}
+                    >
+                      Criar Reserva
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </>
   );
 };

@@ -358,9 +358,6 @@ const Tabs = () => {
                 </div>
 
                 <div className="alert" style={{ background: 'var(--bg-dark)', border: 'none', marginBottom: '1.5rem' }}>
-                  <p className="text-sm">
-                    💡 <strong>Dica:</strong> Após criar a comanda, você poderá adicionar produtos e itens.
-                  </p>
                 </div>
 
                 <div className="flex" style={{ gap: '1rem' }}>

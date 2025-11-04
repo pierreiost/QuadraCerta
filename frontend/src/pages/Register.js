@@ -1,77 +1,172 @@
+// frontend/src/pages/Register.js
+
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { UserPlus } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { authService } from '../services/api';
+import { Building2, LogIn } from 'lucide-react';
+import MaskedInput from '../components/MaskedInput';
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
+    password: '',
+    confirmPassword: '',
+    phone: '',
     cpf: '',
     cnpj: '',
-    complexName: '',
-    password: '',
-    phone: '',
+    complexName: ''
   });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => {
+  const handleInputChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [e.target.name]: e.target.value
     });
+  };
+
+  const validateForm = () => {
+    // Validar campos obrigatórios
+    if (!formData.firstName || !formData.lastName || !formData.email || 
+        !formData.password || !formData.phone || !formData.cnpj || !formData.complexName) {
+      setError('Todos os campos obrigatórios devem ser preenchidos');
+      return false;
+    }
+
+    // Validar email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Email inválido');
+      return false;
+    }
+
+    // Validar senha forte
+    if (formData.password.length < 8) {
+      setError('A senha deve ter no mínimo 8 caracteres');
+      return false;
+    }
+
+    if (!/[a-z]/.test(formData.password)) {
+      setError('A senha deve conter letras minúsculas');
+      return false;
+    }
+
+    if (!/[A-Z]/.test(formData.password)) {
+      setError('A senha deve conter letras maiúsculas');
+      return false;
+    }
+
+    if (!/[0-9]/.test(formData.password)) {
+      setError('A senha deve conter números');
+      return false;
+    }
+
+    if (!/[@$!%*?&#]/.test(formData.password)) {
+      setError('A senha deve conter caracteres especiais (@$!%*?&#)');
+      return false;
+    }
+
+    // Validar confirmação de senha
+    if (formData.password !== formData.confirmPassword) {
+      setError('As senhas não coincidem');
+      return false;
+    }
+
+    // Validar telefone (deve ter 14 ou 15 caracteres com máscara)
+    const phoneNumbers = formData.phone.replace(/\D/g, '');
+    if (phoneNumbers.length < 10 || phoneNumbers.length > 11) {
+      setError('Telefone inválido. Use (XX) XXXXX-XXXX');
+      return false;
+    }
+
+    // Validar CPF (se preenchido)
+    if (formData.cpf) {
+      const cpfNumbers = formData.cpf.replace(/\D/g, '');
+      if (cpfNumbers.length !== 11) {
+        setError('CPF inválido. Use XXX.XXX.XXX-XX');
+        return false;
+      }
+    }
+
+    // Validar CNPJ
+    const cnpjNumbers = formData.cnpj.replace(/\D/g, '');
+    if (cnpjNumbers.length !== 14) {
+      setError('CNPJ inválido. Use XX.XXX.XXX/XXXX-XX');
+      return false;
+    }
+
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
-    const result = await register(formData);
-
-    if (result.success) {
-      navigate('/dashboard');
-    } else {
-      setError(result.error);
+    if (!validateForm()) {
+      return;
     }
 
-    setLoading(false);
+    setLoading(true);
+
+    try {
+      const response = await authService.register({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.phone,
+        cpf: formData.cpf || undefined,
+        cnpj: formData.cnpj,
+        complexName: formData.complexName
+      });
+
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Erro no registro:', error);
+      setError(error.response?.data?.error || 'Erro ao criar conta. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex-center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', padding: '2rem 0' }}>
-      <div className="card" style={{ maxWidth: '600px', width: '90%' }}>
+    <div className="flex-center" style={{ minHeight: '100vh', background: 'var(--bg-dark)' }}>
+      <div className="card" style={{ maxWidth: '600px', width: '90%', margin: '2rem' }}>
         <div className="text-center" style={{ marginBottom: '2rem' }}>
-          <div style={{ 
-            width: '80px', 
-            height: '80px', 
-            background: 'linear-gradient(135deg, #10b981, #059669)', 
-            borderRadius: '50%', 
-            margin: '0 auto 1rem',
+          <div style={{
+            width: '60px',
+            height: '60px',
+            background: 'var(--primary-color)',
+            borderRadius: '12px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white',
-            fontSize: '2rem',
-            fontWeight: 'bold'
+            margin: '0 auto 1rem',
+            color: 'white'
           }}>
-            QC
+            <Building2 size={32} />
           </div>
-          <h1 className="text-2xl font-bold">Criar Conta</h1>
-          <p className="text-muted text-sm">Cadastre seu complexo esportivo</p>
+          <h1 className="font-bold text-2xl">Criar Conta</h1>
+          <p className="text-muted" style={{ marginTop: '0.5rem' }}>
+            Cadastre seu complexo esportivo
+          </p>
         </div>
 
         {error && (
-          <div className="alert alert-danger">
+          <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
+          
           <div className="grid grid-2">
             <div className="input-group">
               <label htmlFor="firstName">Nome *</label>
@@ -80,8 +175,10 @@ const Register = () => {
                 id="firstName"
                 name="firstName"
                 value={formData.firstName}
-                onChange={handleChange}
+                onChange={handleInputChange}
                 required
+                disabled={loading}
+                placeholder="João"
               />
             </div>
 
@@ -92,8 +189,10 @@ const Register = () => {
                 id="lastName"
                 name="lastName"
                 value={formData.lastName}
-                onChange={handleChange}
+                onChange={handleInputChange}
                 required
+                disabled={loading}
+                placeholder="Silva"
               />
             </div>
           </div>
@@ -105,86 +204,115 @@ const Register = () => {
               id="email"
               name="email"
               value={formData.email}
-              onChange={handleChange}
+              onChange={handleInputChange}
               required
+              disabled={loading}
+              placeholder="seu@email.com"
             />
           </div>
 
           <div className="grid grid-2">
             <div className="input-group">
-              <label htmlFor="cpf">CPF</label>
+              <label htmlFor="password">Senha *</label>
               <input
-                type="text"
-                id="cpf"
-                name="cpf"
-                value={formData.cpf}
-                onChange={handleChange}
-                placeholder="000.000.000-00"
+                type="password"
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleInputChange}
+                required
+                disabled={loading}
+                placeholder="••••••••"
               />
+              <small className="text-muted">
+                Mín. 8 caracteres, maiúsculas, minúsculas, números e especiais
+              </small>
             </div>
 
             <div className="input-group">
-              <label htmlFor="phone">Telefone *</label>
+              <label htmlFor="confirmPassword">Confirmar Senha *</label>
               <input
-                type="tel"
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
+                type="password"
+                id="confirmPassword"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleInputChange}
                 required
-                placeholder="(00) 00000-0000"
+                disabled={loading}
+                placeholder="••••••••"
               />
             </div>
           </div>
 
           <div className="grid grid-2">
             <div className="input-group">
-              <label htmlFor="cnpj">CNPJ *</label>
-              <input
-                type="text"
-                id="cnpj"
-                name="cnpj"
-                value={formData.cnpj}
-                onChange={handleChange}
+              <label htmlFor="phone">Telefone *</label>
+              <MaskedInput
+                mask="phone"
+                id="phone"
+                name="phone"
+                value={formData.phone}
+                onChange={handleInputChange}
                 required
-                placeholder="00.000.000/0000-00"
+                disabled={loading}
+                placeholder="(00) 00000-0000"
               />
             </div>
 
             <div className="input-group">
-              <label htmlFor="complexName">Nome do Complexo *</label>
-              <input
-                type="text"
-                id="complexName"
-                name="complexName"
-                value={formData.complexName}
-                onChange={handleChange}
-                required
+              <label htmlFor="cpf">CPF (Opcional)</label>
+              <MaskedInput
+                mask="cpf"
+                id="cpf"
+                name="cpf"
+                value={formData.cpf}
+                onChange={handleInputChange}
+                disabled={loading}
+                placeholder="000.000.000-00"
               />
             </div>
           </div>
 
           <div className="input-group">
-            <label htmlFor="password">Senha *</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
+            <label htmlFor="cnpj">CNPJ do Complexo *</label>
+            <MaskedInput
+              mask="cnpj"
+              id="cnpj"
+              name="cnpj"
+              value={formData.cnpj}
+              onChange={handleInputChange}
               required
-              minLength="6"
-              placeholder="Mínimo 6 caracteres"
+              disabled={loading}
+              placeholder="00.000.000/0000-00"
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
+          <div className="input-group">
+            <label htmlFor="complexName">Nome do Complexo *</label>
+            <input
+              type="text"
+              id="complexName"
+              name="complexName"
+              value={formData.complexName}
+              onChange={handleInputChange}
+              required
+              disabled={loading}
+              placeholder="Arena Sports Center"
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            className="btn btn-primary"
+            style={{ width: '100%', marginTop: '1rem' }}
+            disabled={loading}
+          >
             {loading ? (
               <span className="loading"></span>
             ) : (
               <>
-                <UserPlus size={18} />
-                Cadastrar
+                <LogIn size={18} />
+                Criar Conta
               </>
             )}
           </button>

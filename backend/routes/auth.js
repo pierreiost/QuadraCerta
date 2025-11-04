@@ -2,172 +2,337 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
+const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Registro de novo complexo (Admin)
-router.post('/register', async (req, res) => {
+// ============================================
+// RATE LIMITER - Definido aqui no próprio arquivo
+// ============================================
+const loginFailureLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5, // 5 tentativas de login com FALHA
+  skipSuccessfulRequests: true, // ← Ignora logins bem-sucedidos
+  message: {
+    error: 'Muitas tentativas de login incorretas. Tente novamente em 15 minutos.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.ip;
+  }
+});
+
+// Validações
+const registerValidation = [
+  body('firstName')
+    .trim()
+    .notEmpty().withMessage('Nome é obrigatório')
+    .isLength({ min: 2, max: 50 }).withMessage('Nome deve ter entre 2 e 50 caracteres'),
+  
+  body('lastName')
+    .trim()
+    .notEmpty().withMessage('Sobrenome é obrigatório')
+    .isLength({ min: 2, max: 50 }).withMessage('Sobrenome deve ter entre 2 e 50 caracteres'),
+  
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email é obrigatório')
+    .isEmail().withMessage('Email inválido')
+    .normalizeEmail(),
+  
+  body('password')
+    .notEmpty().withMessage('Senha é obrigatória')
+    .isLength({ min: 8 }).withMessage('Senha deve ter no mínimo 8 caracteres')
+    .matches(/[a-z]/).withMessage('Senha deve conter letras minúsculas')
+    .matches(/[A-Z]/).withMessage('Senha deve conter letras maiúsculas')
+    .matches(/[0-9]/).withMessage('Senha deve conter números')
+    .matches(/[@$!%*?&#]/).withMessage('Senha deve conter caracteres especiais (@$!%*?&#)'),
+  
+  body('phone')
+    .trim()
+    .notEmpty().withMessage('Telefone é obrigatório')
+    .matches(/^\(\d{2}\)\s?\d{4,5}-\d{4}$/).withMessage('Telefone inválido. Use (XX) XXXXX-XXXX'),
+  
+  body('complexName')
+    .trim()
+    .notEmpty().withMessage('Nome do complexo é obrigatório')
+    .isLength({ min: 3, max: 100 }).withMessage('Nome do complexo deve ter entre 3 e 100 caracteres'),
+  
+  body('cnpj')
+    .trim()
+    .notEmpty().withMessage('CNPJ é obrigatório')
+    .matches(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/).withMessage('CNPJ inválido. Use XX.XXX.XXX/XXXX-XX')
+];
+
+const loginValidation = [
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email é obrigatório')
+    .isEmail().withMessage('Email inválido')
+    .normalizeEmail(),
+  
+  body('password')
+    .notEmpty().withMessage('Senha é obrigatória')
+];
+
+// Registro de novo complexo (SEM rate limit)
+router.post('/register', registerValidation, async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      password,
-      cpf,
-      cnpj,
-      complexName,
-      phone
-    } = req.body;
-
-    // Validações
-    if (!firstName || !lastName || !email || !password || !cnpj || !complexName || !phone) {
-      return res.status(400).json({ error: 'Todos os campos obrigatórios devem ser preenchidos.' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        error: 'Dados inválidos',
+        details: errors.array().map(err => err.msg)
+      });
     }
 
-    // Verificar se email já existe
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const { firstName, lastName, email, password, phone, cpf, cnpj, complexName } = req.body;
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+
     if (existingUser) {
-      return res.status(400).json({ error: 'Email já cadastrado.' });
+      return res.status(409).json({ error: 'Email já está em uso' });
     }
 
-    // Verificar se CNPJ já existe
-    const existingComplex = await prisma.complex.findUnique({ where: { cnpj } });
+    const existingComplex = await prisma.complex.findUnique({
+      where: { cnpj }
+    });
+
     if (existingComplex) {
-      return res.status(400).json({ error: 'CNPJ já cadastrado.' });
+      return res.status(409).json({ error: 'CNPJ já está cadastrado' });
     }
 
-    // Hash da senha
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Criar complexo
-    const complex = await prisma.complex.create({
-      data: {
-        name: complexName,
-        cnpj
-      }
+    const result = await prisma.$transaction(async (tx) => {
+      const complex = await tx.complex.create({
+        data: {
+          name: complexName,
+          cnpj
+        }
+      });
+
+      const user = await tx.user.create({
+        data: {
+          firstName,
+          lastName,
+          email: email.toLowerCase(),
+          password: hashedPassword,
+          phone,
+          cpf,
+          cnpj,
+          role: 'ADMIN',
+          complexId: complex.id
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          phone: true,
+          cpf: true,
+          cnpj: true,
+          complex: {
+            select: {
+              id: true,
+              name: true,
+              cnpj: true
+            }
+          }
+        }
+      });
+
+      return { user, complex };
     });
 
-    // Criar usuário Admin
-    const user = await prisma.user.create({
-      data: {
-        firstName,
-        lastName,
-        email,
-        password: hashedPassword,
-        cpf,
-        cnpj,
-        phone,
-        role: 'ADMIN',
-        complexId: complex.id
-      }
-    });
-
-    // Gerar token
     const token = jwt.sign(
-      { userId: user.id, role: user.role, complexId: user.complexId },
+      { 
+        userId: result.user.id,
+        complexId: result.complex.id,
+        role: result.user.role
+      },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
     res.status(201).json({
-      message: 'Usuário e complexo cadastrados com sucesso!',
+      message: 'Cadastro realizado com sucesso',
       token,
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        complexId: user.complexId
-      }
+      user: result.user
     });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao registrar usuário.' });
+    console.error('Erro no registro:', error);
+    res.status(500).json({ error: 'Erro ao criar conta. Tente novamente.' });
   }
 });
 
-// Login
-router.post('/login', async (req, res) => {
+// ============================================
+// LOGIN - COM RATE LIMITING APENAS EM FALHAS
+// ============================================
+router.post('/login', loginFailureLimiter, loginValidation, async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        error: 'Dados inválidos',
+        details: errors.array().map(err => err.msg)
+      });
     }
 
-    // Buscar usuário
+    const { email, password } = req.body;
+
     const user = await prisma.user.findUnique({
-      where: { email },
-      include: { complex: true }
+      where: { email: email.toLowerCase() },
+      include: {
+        complex: {
+          select: {
+            id: true,
+            name: true,
+            cnpj: true
+          }
+        }
+      }
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Credenciais inválidas.' });
+      // ⚠️ Retorna 401 - rate limiter conta esta tentativa
+      return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    // Verificar senha
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Credenciais inválidas.' });
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      // ⚠️ Retorna 401 - rate limiter conta esta tentativa
+      return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    // Gerar token
+    // ✅ Login bem-sucedido - NÃO conta para o rate limit
+    // devido ao skipSuccessfulRequests: true
+    
     const token = jwt.sign(
-      { userId: user.id, role: user.role, complexId: user.complexId },
+      { 
+        userId: user.id,
+        complexId: user.complexId,
+        role: user.role
+      },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
+    const { password: _, ...userWithoutPassword } = user;
+
     res.json({
-      message: 'Login realizado com sucesso!',
+      message: 'Login realizado com sucesso',
       token,
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        complexId: user.complexId,
-        complex: user.complex
-      }
+      user: userWithoutPassword
     });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao fazer login.' });
+    console.error('Erro no login:', error);
+    res.status(500).json({ error: 'Erro ao fazer login. Tente novamente.' });
   }
 });
 
-// Obter dados do usuário autenticado
+// Obter dados do usuário logado (SEM rate limit)
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
-      include: { complex: true },
       select: {
         id: true,
         firstName: true,
         lastName: true,
         email: true,
-        cpf: true,
-        phone: true,
         role: true,
-        complexId: true,
-        complex: true
+        phone: true,
+        cpf: true,
+        cnpj: true,
+        complex: {
+          select: {
+            id: true,
+            name: true,
+            cnpj: true
+          }
+        },
+        createdAt: true,
+        updatedAt: true
       }
     });
 
     if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado.' });
+      return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
     res.json(user);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao buscar dados do usuário.' });
+    console.error('Erro ao buscar usuário:', error);
+    res.status(500).json({ error: 'Erro ao buscar dados do usuário' });
   }
 });
+
+// Atualizar senha (SEM rate limit - usuário já está autenticado)
+router.put('/change-password', 
+  authMiddleware,
+  [
+    body('currentPassword')
+      .notEmpty().withMessage('Senha atual é obrigatória'),
+    
+    body('newPassword')
+      .notEmpty().withMessage('Nova senha é obrigatória')
+      .isLength({ min: 8 }).withMessage('Senha deve ter no mínimo 8 caracteres')
+      .matches(/[a-z]/).withMessage('Senha deve conter letras minúsculas')
+      .matches(/[A-Z]/).withMessage('Senha deve conter letras maiúsculas')
+      .matches(/[0-9]/).withMessage('Senha deve conter números')
+      .matches(/[@$!%*?&#]/).withMessage('Senha deve conter caracteres especiais'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ 
+          error: 'Dados inválidos',
+          details: errors.array().map(err => err.msg)
+        });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.userId }
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado' });
+      }
+
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+
+      if (!isPasswordValid) {
+        return res.status(401).json({ error: 'Senha atual incorreta' });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      await prisma.user.update({
+        where: { id: req.user.userId },
+        data: { password: hashedPassword }
+      });
+
+      res.json({ message: 'Senha alterada com sucesso' });
+
+    } catch (error) {
+      console.error('Erro ao alterar senha:', error);
+      res.status(500).json({ error: 'Erro ao alterar senha' });
+    }
+  }
+);
 
 module.exports = router;

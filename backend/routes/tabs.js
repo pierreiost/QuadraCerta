@@ -68,7 +68,12 @@ router.get('/:id', authMiddleware, async (req, res) => {
 // Criar nova comanda
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { clientId, reservationId } = req.body;
+    let { clientId, reservationId } = req.body;
+
+    // ✅ CORREÇÃO: Limpar reservationId se vier vazio
+    if (!reservationId || reservationId === '' || reservationId === 'null' || reservationId === 'undefined') {
+      reservationId = null;
+    }
 
     if (!clientId) {
       return res.status(400).json({ error: 'Cliente é obrigatório.' });
@@ -100,7 +105,7 @@ router.post('/', authMiddleware, async (req, res) => {
     const tab = await prisma.tab.create({
       data: {
         clientId,
-        reservationId: reservationId || undefined, // Esta linha foi alterada
+        reservationId: reservationId || undefined,
         status: 'OPEN'
       },
       include: {

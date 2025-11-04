@@ -1,12 +1,13 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
+const { reservationValidators, validateId } = require('../validators/validators');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Listar reservas do complexo
-router.get('/', authMiddleware, async (req, res) => {
+// Listar reservas do complexo com filtros
+router.get('/', authMiddleware, reservationValidators.query, async (req, res) => {
   try {
     const { startDate, endDate, courtId, status } = req.query;
     
@@ -39,13 +40,13 @@ router.get('/', authMiddleware, async (req, res) => {
 
     res.json(reservations);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao buscar reservas.' });
+    console.error('Erro ao buscar reservas:', error);
+    res.status(500).json({ error: 'Erro ao buscar reservas' });
   }
 });
 
 // Buscar reserva por ID
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, validateId, async (req, res) => {
   try {
     const reservation = await prisma.reservation.findFirst({
       where: {
@@ -61,35 +62,29 @@ router.get('/:id', authMiddleware, async (req, res) => {
     });
 
     if (!reservation) {
-      return res.status(404).json({ error: 'Reserva não encontrada.' });
+      return res.status(404).json({ error: 'Reserva não encontrada' });
     }
 
     res.json(reservation);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao buscar reserva.' });
+    console.error('Erro ao buscar reserva:', error);
+    res.status(500).json({ error: 'Erro ao buscar reserva' });
   }
 });
 
 // Criar nova reserva (avulsa ou recorrente)
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, reservationValidators.create, async (req, res) => {
   try {
-    // --- ALTERAÇÃO: Recebe durationInHours no lugar de endTime ---
     const {
       courtId,
       clientId,
       startTime,
-      durationInHours = 1, // Define 1 hora como padrão se não for enviado
+      durationInHours = 1,
       isRecurring,
       frequency,
       dayOfWeek,
       endDate
     } = req.body;
-
-    if (!courtId || !clientId || !startTime) {
-      return res.status(400).json({ error: 'Campos obrigatórios (Quadra, Cliente, Início) não preenchidos.' });
-    }
-    // --- FIM DA ALTERAÇÃO ---
 
     // Verificar se quadra pertence ao complexo
     const court = await prisma.court.findFirst({
@@ -97,7 +92,7 @@ router.post('/', authMiddleware, async (req, res) => {
     });
 
     if (!court) {
-      return res.status(404).json({ error: 'Quadra não encontrada.' });
+      return res.status(404).json({ error: 'Quadra não encontrada' });
     }
 
     // Verificar se cliente pertence ao complexo
@@ -106,46 +101,62 @@ router.post('/', authMiddleware, async (req, res) => {
     });
 
     if (!client) {
-      return res.status(404).json({ error: 'Cliente não encontrado.' });
+      return res.status(404).json({ error: 'Cliente não encontrado' });
     }
 
-    // --- ALTERAÇÃO: Calcular endTime a partir da duração ---
+    // Calcular endTime a partir da duração
     const start = new Date(startTime);
-    
     const duration = parseFloat(durationInHours);
-    if (isNaN(duration) || duration <= 0) {
-      return res.status(400).json({ error: 'Duração da reserva inválida. Deve ser um número positivo.' });
+    
+    if (isNaN(duration) || duration <= 0 || duration > 12) {
+      return res.status(400).json({ 
+        error: 'Duração inválida. Deve ser entre 0.5 e 12 horas' 
+      });
     }
     
-    // Converte horas (ex: 1.5) para milissegundos
     const durationInMilliseconds = duration * 60 * 60 * 1000;
     const end = new Date(start.getTime() + durationInMilliseconds);
-    // --- FIM DA ALTERAÇÃO ---
 
-
-    // Verifica se a data de início da reserva é no passado
+    // Verificar se a data de início é no futuro
     const now = new Date();
     if (start < now) {
-      return res.status(400).json({ error: 'Não é permitido criar reservas em datas ou horários retroativos.' });
+      return res.status(400).json({ 
+        error: 'Não é permitido criar reservas em datas ou horários retroativos' 
+      });
     }
     
     if (isRecurring) {
+      // === RESERVA RECORRENTE ===
+      
+      // Validar campos necessários
+      if (!endDate) {
+        return res.status(400).json({ 
+          error: 'Data final é obrigatória para reservas recorrentes' 
+        });
+      }
+
       // Criar grupo de recorrência
       const recurringGroup = await prisma.recurringGroup.create({
         data: {
           frequency: frequency || 'WEEKLY',
           dayOfWeek: dayOfWeek !== undefined ? parseInt(dayOfWeek) : start.getDay(),
           startDate: start,
-          endDate: endDate ? new Date(endDate) : null
+          endDate: new Date(endDate)
         }
       });
 
       // Gerar reservas recorrentes
       const reservations = [];
       let currentDate = new Date(start);
-      const finalDate = endDate ? new Date(endDate) : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 dias
+      const finalDate = new Date(endDate);
 
-      while (currentDate <= finalDate) {
+      // Limitar a 52 semanas (1 ano)
+      const maxDate = new Date(start.getTime() + (365 * 24 * 60 * 60 * 1000));
+      const limitDate = finalDate < maxDate ? finalDate : maxDate;
+
+      while (currentDate <= limitDate) {
+        const currentEnd = new Date(currentDate.getTime() + durationInMilliseconds);
+
         // Verificar conflitos
         const conflict = await prisma.reservation.findFirst({
           where: {
@@ -160,9 +171,14 @@ router.post('/', authMiddleware, async (req, res) => {
               },
               {
                 AND: [
-                  // (end - start) agora é a duração em milissegundos
-                  { startTime: { lt: new Date(currentDate.getTime() + durationInMilliseconds) } },
-                  { endTime: { gte: new Date(currentDate.getTime() + durationInMilliseconds) } }
+                  { startTime: { lt: currentEnd } },
+                  { endTime: { gte: currentEnd } }
+                ]
+              },
+              {
+                AND: [
+                  { startTime: { gte: currentDate } },
+                  { endTime: { lte: currentEnd } }
                 ]
               }
             ]
@@ -174,15 +190,28 @@ router.post('/', authMiddleware, async (req, res) => {
             courtId,
             clientId,
             startTime: new Date(currentDate),
-            endTime: new Date(currentDate.getTime() + durationInMilliseconds), // Usa a duração
+            endTime: currentEnd,
             isRecurring: true,
             recurringGroupId: recurringGroup.id,
             status: 'CONFIRMED'
           });
+        } else {
+          console.log(`Conflito em ${currentDate.toISOString()} - reserva não criada`);
         }
 
-        // Próxima ocorrência (adicionar 7 dias)
-        currentDate = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+        // Próxima ocorrência
+        if (frequency === 'MONTHLY') {
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        } else {
+          // WEEKLY (padrão)
+          currentDate = new Date(currentDate.getTime() + (7 * 24 * 60 * 60 * 1000));
+        }
+      }
+
+      if (reservations.length === 0) {
+        return res.status(400).json({ 
+          error: 'Não foi possível criar nenhuma reserva. Todos os horários estão ocupados' 
+        });
       }
 
       const createdReservations = await prisma.reservation.createMany({
@@ -192,10 +221,14 @@ router.post('/', authMiddleware, async (req, res) => {
       res.status(201).json({
         message: `${reservations.length} reservas recorrentes criadas com sucesso!`,
         recurringGroupId: recurringGroup.id,
-        count: createdReservations.count
+        count: createdReservations.count,
+        createdReservations: reservations.length,
+        skippedConflicts: 0 // pode calcular depois se necessário
       });
+
     } else {
-      // Criar reserva avulsa
+      // === RESERVA AVULSA ===
+      
       // Verificar conflitos
       const conflict = await prisma.reservation.findFirst({
         where: {
@@ -213,13 +246,29 @@ router.post('/', authMiddleware, async (req, res) => {
                 { startTime: { lt: end } },
                 { endTime: { gte: end } }
               ]
+            },
+            {
+              AND: [
+                { startTime: { gte: start } },
+                { endTime: { lte: end } }
+              ]
             }
           ]
+        },
+        include: {
+          client: true
         }
       });
 
       if (conflict) {
-        return res.status(400).json({ error: 'Horário já está reservado.' });
+        return res.status(409).json({ 
+          error: 'Horário já está reservado',
+          conflictWith: {
+            client: conflict.client.fullName,
+            startTime: conflict.startTime,
+            endTime: conflict.endTime
+          }
+        });
       }
 
       const reservation = await prisma.reservation.create({
@@ -227,7 +276,7 @@ router.post('/', authMiddleware, async (req, res) => {
           courtId,
           clientId,
           startTime: start,
-          endTime: end, // Usa o 'end' calculado
+          endTime: end,
           isRecurring: false,
           status: 'CONFIRMED'
         },
@@ -240,16 +289,15 @@ router.post('/', authMiddleware, async (req, res) => {
       res.status(201).json(reservation);
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao criar reserva.' });
+    console.error('Erro ao criar reserva:', error);
+    res.status(500).json({ error: 'Erro ao criar reserva' });
   }
 });
 
 // Atualizar reserva
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, validateId, async (req, res) => {
   try {
-    // --- ALTERAÇÃO: Permite atualizar 'durationInHours' também ---
-    const { startTime, endTime, durationInHours, status } = req.body;
+    const { startTime, durationInHours, status } = req.body;
 
     const reservation = await prisma.reservation.findFirst({
       where: {
@@ -259,29 +307,68 @@ router.put('/:id', authMiddleware, async (req, res) => {
     });
 
     if (!reservation) {
-      return res.status(404).json({ error: 'Reserva não encontrada.' });
+      return res.status(404).json({ error: 'Reserva não encontrada' });
+    }
+
+    // Não permitir editar reservas canceladas
+    if (reservation.status === 'CANCELLED') {
+      return res.status(400).json({ 
+        error: 'Não é possível editar uma reserva cancelada' 
+      });
     }
     
     let newStartTime = startTime ? new Date(startTime) : reservation.startTime;
-    let newEndTime = endTime ? new Date(endTime) : reservation.endTime;
+    let newEndTime = reservation.endTime;
 
-    // Se a duração for enviada, ela tem prioridade sobre o endTime
+    // Se duração foi enviada, recalcular endTime
     if (durationInHours) {
-        const duration = parseFloat(durationInHours);
-        if (isNaN(duration) || duration <= 0) {
-          return res.status(400).json({ error: 'Duração inválida.' });
-        }
-        const durationInMilliseconds = duration * 60 * 60 * 1000;
-        newEndTime = new Date(newStartTime.getTime() + durationInMilliseconds);
+      const duration = parseFloat(durationInHours);
+      if (isNaN(duration) || duration <= 0 || duration > 12) {
+        return res.status(400).json({ 
+          error: 'Duração inválida. Deve ser entre 0.5 e 12 horas' 
+        });
+      }
+      const durationInMilliseconds = duration * 60 * 60 * 1000;
+      newEndTime = new Date(newStartTime.getTime() + durationInMilliseconds);
     }
-    // --- FIM DA ALTERAÇÃO ---
+
+    // Verificar conflitos (se mudou horário)
+    if (startTime || durationInHours) {
+      const conflict = await prisma.reservation.findFirst({
+        where: {
+          courtId: reservation.courtId,
+          id: { not: req.params.id }, // Excluir a própria reserva
+          status: { not: 'CANCELLED' },
+          OR: [
+            {
+              AND: [
+                { startTime: { lte: newStartTime } },
+                { endTime: { gt: newStartTime } }
+              ]
+            },
+            {
+              AND: [
+                { startTime: { lt: newEndTime } },
+                { endTime: { gte: newEndTime } }
+              ]
+            }
+          ]
+        }
+      });
+
+      if (conflict) {
+        return res.status(409).json({ 
+          error: 'Novo horário conflita com outra reserva existente' 
+        });
+      }
+    }
 
     const updatedReservation = await prisma.reservation.update({
       where: { id: req.params.id },
       data: {
-        startTime: newStartTime,
-        endTime: newEndTime,
-        status
+        ...(startTime && { startTime: newStartTime }),
+        ...(durationInHours && { endTime: newEndTime }),
+        ...(status && { status })
       },
       include: {
         court: true,
@@ -291,23 +378,36 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     res.json(updatedReservation);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao atualizar reserva.' });
+    console.error('Erro ao atualizar reserva:', error);
+    res.status(500).json({ error: 'Erro ao atualizar reserva' });
   }
 });
 
 // Cancelar reserva
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, validateId, async (req, res) => {
   try {
     const reservation = await prisma.reservation.findFirst({
       where: {
         id: req.params.id,
         court: { complexId: req.user.complexId }
+      },
+      include: {
+        tabs: {
+          where: { status: 'OPEN' }
+        }
       }
     });
 
     if (!reservation) {
-      return res.status(404).json({ error: 'Reserva não encontrada.' });
+      return res.status(404).json({ error: 'Reserva não encontrada' });
+    }
+
+    // Verificar se há comandas abertas
+    if (reservation.tabs.length > 0) {
+      return res.status(400).json({ 
+        error: 'Não é possível cancelar reserva com comandas abertas. Feche as comandas primeiro.',
+        openTabs: reservation.tabs.length
+      });
     }
 
     await prisma.reservation.update({
@@ -315,10 +415,65 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       data: { status: 'CANCELLED' }
     });
 
-    res.json({ message: 'Reserva cancelada com sucesso.' });
+    res.json({ 
+      message: 'Reserva cancelada com sucesso',
+      reservationId: req.params.id
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao cancelar reserva.' });
+    console.error('Erro ao cancelar reserva:', error);
+    res.status(500).json({ error: 'Erro ao cancelar reserva' });
+  }
+});
+
+// Cancelar grupo de reservas recorrentes
+router.delete('/recurring-group/:groupId', authMiddleware, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+
+    // Verificar se o grupo existe e pertence ao complexo
+    const group = await prisma.recurringGroup.findFirst({
+      where: {
+        id: groupId
+      },
+      include: {
+        reservations: {
+          include: {
+            court: true
+          }
+        }
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ error: 'Grupo de recorrência não encontrado' });
+    }
+
+    // Verificar se pertence ao complexo
+    if (group.reservations.length > 0 && 
+        group.reservations[0].court.complexId !== req.user.complexId) {
+      return res.status(403).json({ error: 'Sem permissão para cancelar este grupo' });
+    }
+
+    // Cancelar todas as reservas futuras do grupo
+    const now = new Date();
+    const result = await prisma.reservation.updateMany({
+      where: {
+        recurringGroupId: groupId,
+        startTime: { gte: now },
+        status: { not: 'CANCELLED' }
+      },
+      data: {
+        status: 'CANCELLED'
+      }
+    });
+
+    res.json({ 
+      message: 'Reservas recorrentes canceladas com sucesso',
+      cancelledCount: result.count
+    });
+  } catch (error) {
+    console.error('Erro ao cancelar grupo de reservas:', error);
+    res.status(500).json({ error: 'Erro ao cancelar grupo de reservas' });
   }
 });
 

@@ -5,7 +5,6 @@ const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
-const rateLimit = require('express-rate-limit');
 const { PrismaClient } = require('@prisma/client');
 
 const authRoutes = require('./routes/auth');
@@ -67,54 +66,18 @@ app.use(xss());
 // Proteção contra poluição de parâmetros HTTP
 app.use(hpp());
 
-// ============================================
-// RATE LIMITING APENAS PARA FALHAS DE LOGIN
-// ============================================
-
-// Rate limiting SOMENTE para tentativas de login com FALHA
-// Bloqueia após 5 tentativas ERRADAS em 15 minutos
-const loginFailureLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // 5 tentativas de login com FALHA
-  skipSuccessfulRequests: true, // ← IMPORTANTE: Ignora logins bem-sucedidos
-  message: {
-    error: 'Muitas tentativas de login incorretas. Tente novamente em 15 minutos.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Aplica o rate limit baseado no IP
-  keyGenerator: (req) => {
-    return req.ip;
-  }
-});
-
-// Rate limiting para criação excessiva de recursos
-// Evita spam de cadastros (20 cadastros por hora)
-const createResourceLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hora
-  max: 20, // 20 criações por hora
-  message: {
-    error: 'Muitas criações de recursos. Tente novamente em 1 hora.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Só aplica em rotas POST específicas (cadastros)
-  skip: (req) => req.method !== 'POST'
-});
-
 // Disponibilizar Prisma globalmente
 app.locals.prisma = prisma;
 
 // ============================================
-// ROTAS - Rate limiting aplicado SELETIVAMENTE
+// ROTAS - SEM rate limiting geral
 // ============================================
 
-// Rotas de autenticação com rate limiting APENAS no login
-// O register tem limite de criação, mas não de tentativas
+// Rotas de autenticação
+// O rate limiting está DENTRO do auth.js apenas na rota de login
 app.use('/api/auth', authRoutes);
 
-// Demais rotas SEM rate limiting geral
-// Você pode usar o sistema livremente!
+// Demais rotas SEM rate limiting
 app.use('/api/courts', courtRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/reservations', reservationRoutes);
@@ -122,7 +85,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/tabs', tabRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
-// Rota de health check (sem rate limit)
+// Rota de health check
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -182,14 +145,12 @@ const server = app.listen(PORT, () => {
   console.log(`🔒 Segurança ativada:`);
   console.log(`   ✓ Helmet (Headers seguros)`);
   console.log(`   ✓ CORS restritivo`);
-  console.log(`   ✓ Rate limiting APENAS para login com falha`);
   console.log(`   ✓ XSS Protection`);
   console.log(`   ✓ NoSQL Injection Protection`);
   console.log(`   ✓ HPP Protection`);
   console.log(`\n💡 Rate limiting:`);
   console.log(`   • Uso normal: SEM LIMITE ✅`);
-  console.log(`   • Login com FALHA: 5 tentativas/15min ⚠️`);
-  console.log(`   • Cadastros: 20 cadastros/hora ⚠️\n`);
+  console.log(`   • Login com senha ERRADA: 5 tentativas/15min ⚠️\n`);
 });
 
 // Graceful shutdown
@@ -228,5 +189,4 @@ process.on('uncaughtException', (error) => {
   gracefulShutdown('uncaughtException');
 });
 
-// Exportar o limiter para usar na rota de auth
-module.exports = { app, loginFailureLimiter };
+module.exports = app;
