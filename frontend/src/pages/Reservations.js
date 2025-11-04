@@ -13,6 +13,7 @@ const Reservations = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedCourt, setSelectedCourt] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('ACTIVE'); // ✅ Padrão: ACTIVE
   
   const [formData, setFormData] = useState({
     courtId: '',
@@ -60,7 +61,6 @@ const Reservations = () => {
   };
 
   const openModal = () => {
-    // Data atual + 1 hora, arredondada
     const now = new Date();
     const nextHour = new Date(now.setHours(now.getHours() + 1, 0, 0, 0));
     const formattedDate = format(nextHour, "yyyy-MM-dd'T'HH:mm");
@@ -98,7 +98,6 @@ const Reservations = () => {
     e.preventDefault();
     setError('');
 
-    // Validações frontend
     if (!formData.courtId) {
       setError('Selecione uma quadra');
       return;
@@ -140,7 +139,6 @@ const Reservations = () => {
       const errorMessage = error.response?.data?.error || 'Erro ao criar reserva';
       setError(errorMessage);
       
-      // Se houver conflito, mostrar detalhes
       if (error.response?.data?.conflictWith) {
         const conflict = error.response.data.conflictWith;
         setError(
@@ -176,7 +174,6 @@ const Reservations = () => {
     return badges[status] || { text: status, class: 'badge-info' };
   };
 
-  // Calcular endTime baseado em startTime + duration
   const calculateEndTime = () => {
     if (!formData.startTime || !formData.durationInHours) return '';
     
@@ -189,9 +186,24 @@ const Reservations = () => {
     }
   };
 
+  // ✅ FILTRO MELHORADO - Inclui filtro de status
   const filteredReservations = reservations.filter(reservation => {
+    // Filtro por quadra
     if (selectedCourt && reservation.courtId !== selectedCourt) return false;
+    
+    // Filtro por data
     if (selectedDate && !reservation.startTime.startsWith(selectedDate)) return false;
+    
+    // ✅ NOVO: Filtro por status
+    if (selectedStatus === 'ACTIVE') {
+      // Mostra apenas reservas CONFIRMED e PENDING (não canceladas)
+      if (reservation.status === 'CANCELLED') return false;
+    } else if (selectedStatus === 'CANCELLED') {
+      // Mostra apenas canceladas
+      if (reservation.status !== 'CANCELLED') return false;
+    }
+    // Se selectedStatus === 'ALL', mostra todas
+    
     return true;
   });
 
@@ -213,7 +225,6 @@ const Reservations = () => {
       <Header />
       <div className="container" style={{ marginTop: '2rem' }}>
         
-        {/* Header da Página */}
         <div className="flex-between" style={{ marginBottom: '2rem', alignItems: 'flex-start' }}>
           <div>
             <h1 className="font-bold text-2xl">Reservas</h1>
@@ -227,7 +238,6 @@ const Reservations = () => {
           </button>
         </div>
 
-        {/* Mensagens */}
         {error && (
           <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
             {error}
@@ -240,9 +250,9 @@ const Reservations = () => {
           </div>
         )}
 
-        {/* Filtros */}
+        {/* ✅ FILTROS ATUALIZADOS - Adicionado filtro de status */}
         <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <div className="grid grid-3">
+          <div className="grid grid-4">
             <div className="input-group">
               <label htmlFor="filterCourt">Filtrar por Quadra</label>
               <select
@@ -269,12 +279,27 @@ const Reservations = () => {
               />
             </div>
 
+            {/* ✅ NOVO FILTRO DE STATUS */}
+            <div className="input-group">
+              <label htmlFor="filterStatus">Filtrar por Status</label>
+              <select
+                id="filterStatus"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+              >
+                <option value="ACTIVE">Apenas Ativas</option>
+                <option value="CANCELLED">Apenas Canceladas</option>
+                <option value="ALL">Todas</option>
+              </select>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button
                 className="btn btn-outline"
                 onClick={() => {
                   setSelectedCourt('');
                   setSelectedDate('');
+                  setSelectedStatus('ACTIVE'); // ✅ Resetar para ACTIVE
                 }}
                 style={{ width: '100%' }}
               >
@@ -290,16 +315,16 @@ const Reservations = () => {
           <div className="card text-center" style={{ padding: '3rem' }}>
             <Calendar size={48} style={{ color: 'var(--text-light)', margin: '0 auto 1rem' }} />
             <h3 className="font-bold text-lg" style={{ marginBottom: '0.5rem' }}>
-              {selectedCourt || selectedDate 
+              {selectedCourt || selectedDate || selectedStatus !== 'ACTIVE'
                 ? 'Nenhuma reserva encontrada' 
                 : 'Nenhuma reserva cadastrada'}
             </h3>
             <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
-              {selectedCourt || selectedDate 
+              {selectedCourt || selectedDate || selectedStatus !== 'ACTIVE'
                 ? 'Tente ajustar os filtros' 
                 : 'Comece criando sua primeira reserva'}
             </p>
-            {!selectedCourt && !selectedDate && (
+            {!selectedCourt && !selectedDate && selectedStatus === 'ACTIVE' && (
               <button className="btn btn-primary" onClick={openModal}>
                 <PlusCircle size={18} />
                 Criar Primeira Reserva
@@ -327,7 +352,7 @@ const Reservations = () => {
                     const statusBadge = getStatusBadge(reservation.status);
                     const startTime = parseISO(reservation.startTime);
                     const endTime = parseISO(reservation.endTime);
-                    const duration = (endTime - startTime) / (1000 * 60 * 60); // horas
+                    const duration = (endTime - startTime) / (1000 * 60 * 60);
 
                     return (
                       <tr key={reservation.id}>

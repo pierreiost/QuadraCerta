@@ -41,6 +41,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
+    // Permite requisições sem origin (mobile apps, Postman, etc)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -58,63 +59,51 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Sanitização contra NoSQL injection
 app.use(mongoSanitize());
 
-// Proteção contra XSS
 app.use(xss());
 
-// Proteção contra poluição de parâmetros HTTP
 app.use(hpp());
 
-// ============================================
-// RATE LIMITING APENAS PARA FALHAS DE LOGIN
-// ============================================
-
-// Rate limiting SOMENTE para tentativas de login com FALHA
-// Bloqueia após 5 tentativas ERRADAS em 15 minutos
-const loginFailureLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // 5 tentativas de login com FALHA
-  skipSuccessfulRequests: true, // ← IMPORTANTE: Ignora logins bem-sucedidos
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 100, 
+  max: 1000,
   message: {
-    error: 'Muitas tentativas de login incorretas. Tente novamente em 15 minutos.'
+    error: 'Muitas requisições deste IP. Tente novamente em 15 minutos.'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Aplica o rate limit baseado no IP
-  keyGenerator: (req) => {
-    return req.ip;
-  }
 });
 
-// Rate limiting para criação excessiva de recursos
-// Evita spam de cadastros (20 cadastros por hora)
-const createResourceLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hora
-  max: 20, // 20 criações por hora
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 5,
+  skipSuccessfulRequests: true,
+  message: {
+    error: 'Muitas tentativas de login. Tente novamente em 2 minutos.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const createLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, 
+  max: 20,
   message: {
     error: 'Muitas criações de recursos. Tente novamente em 1 hora.'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Só aplica em rotas POST específicas (cadastros)
-  skip: (req) => req.method !== 'POST'
 });
+
+// Aplicar rate limiting geral
+app.use('/api/', generalLimiter);
 
 // Disponibilizar Prisma globalmente
 app.locals.prisma = prisma;
 
-// ============================================
-// ROTAS - Rate limiting aplicado SELETIVAMENTE
-// ============================================
-
-// Rotas de autenticação com rate limiting APENAS no login
-// O register tem limite de criação, mas não de tentativas
-app.use('/api/auth', authRoutes);
-
-// Demais rotas SEM rate limiting geral
-// Você pode usar o sistema livremente!
+// Rotas com rate limiting específico
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/courts', courtRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/reservations', reservationRoutes);
@@ -182,14 +171,10 @@ const server = app.listen(PORT, () => {
   console.log(`🔒 Segurança ativada:`);
   console.log(`   ✓ Helmet (Headers seguros)`);
   console.log(`   ✓ CORS restritivo`);
-  console.log(`   ✓ Rate limiting APENAS para login com falha`);
+  console.log(`   ✓ Rate limiting`);
   console.log(`   ✓ XSS Protection`);
   console.log(`   ✓ NoSQL Injection Protection`);
-  console.log(`   ✓ HPP Protection`);
-  console.log(`\n💡 Rate limiting:`);
-  console.log(`   • Uso normal: SEM LIMITE ✅`);
-  console.log(`   • Login com FALHA: 5 tentativas/15min ⚠️`);
-  console.log(`   • Cadastros: 20 cadastros/hora ⚠️\n`);
+  console.log(`   ✓ HPP Protection\n`);
 });
 
 // Graceful shutdown
@@ -209,6 +194,7 @@ const gracefulShutdown = async (signal) => {
     }
   });
 
+  // Forçar encerramento após 10 segundos
   setTimeout(() => {
     console.error('Tempo esgotado. Forçando encerramento...');
     process.exit(1);
@@ -218,6 +204,7 @@ const gracefulShutdown = async (signal) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+// Tratamento de erros não capturados
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection:', reason);
   gracefulShutdown('unhandledRejection');
@@ -228,5 +215,4 @@ process.on('uncaughtException', (error) => {
   gracefulShutdown('uncaughtException');
 });
 
-// Exportar o limiter para usar na rota de auth
-module.exports = { app, loginFailureLimiter };
+module.exports = app;

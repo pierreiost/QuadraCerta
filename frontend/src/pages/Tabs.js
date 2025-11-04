@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { tabService, clientService, reservationService } from '../services/api';
-import { Receipt, PlusCircle, Eye, X, DollarSign, Clock, User } from 'lucide-react';
+import { Receipt, PlusCircle, Eye, X, DollarSign, Clock, User, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -15,7 +15,7 @@ const Tabs = () => {
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState('OPEN'); // ✅ Padrão: OPEN
   const [formData, setFormData] = useState({
     clientId: '',
     reservationId: ''
@@ -81,7 +81,6 @@ const Tabs = () => {
       closeModal();
       loadData();
       setTimeout(() => setSuccess(''), 3000);
-      // Redirecionar para detalhes da comanda
       navigate(`/tabs/${response.data.id}`);
     } catch (error) {
       setError(error.response?.data?.error || 'Erro ao criar comanda');
@@ -97,8 +96,11 @@ const Tabs = () => {
     return badges[status] || badges.OPEN;
   };
 
+  // ✅ FILTRO APLICADO - Filtra por status
   const filteredTabs = tabs.filter(tab => {
-    if (filterStatus && tab.status !== filterStatus) return false;
+    if (filterStatus && filterStatus !== 'ALL' && tab.status !== filterStatus) {
+      return false;
+    }
     return true;
   });
 
@@ -208,20 +210,33 @@ const Tabs = () => {
           </div>
         </div>
 
-        {/* Filtros */}
+        {/* ✅ FILTRO ATUALIZADO - Com botão limpar */}
         <div className="card" style={{ marginBottom: '2rem' }}>
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="filterStatus">Filtrar por Status</label>
-            <select
-              id="filterStatus"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="">Todos os status</option>
-              <option value="OPEN">Abertas</option>
-              <option value="PAID">Pagas</option>
-              <option value="CANCELLED">Canceladas</option>
-            </select>
+          <div className="grid grid-2">
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="filterStatus">Filtrar por Status</label>
+              <select
+                id="filterStatus"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="OPEN">Apenas Abertas</option>
+                <option value="PAID">Apenas Pagas</option>
+                <option value="CANCELLED">Apenas Canceladas</option>
+                <option value="ALL">Todos os status</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <button
+                className="btn btn-outline"
+                onClick={() => setFilterStatus('OPEN')}
+                style={{ width: '100%' }}
+              >
+                <RefreshCw size={18} />
+                Limpar Filtro
+              </button>
+            </div>
           </div>
         </div>
 
@@ -229,14 +244,16 @@ const Tabs = () => {
           <div className="card text-center" style={{ padding: '3rem' }}>
             <Receipt size={64} style={{ margin: '0 auto 1rem', color: 'var(--text-light)' }} />
             <h3 className="font-bold" style={{ marginBottom: '0.5rem' }}>
-              {filterStatus ? 'Nenhuma comanda encontrada' : 'Nenhuma comanda cadastrada'}
+              {filterStatus && filterStatus !== 'ALL' 
+                ? 'Nenhuma comanda encontrada' 
+                : 'Nenhuma comanda cadastrada'}
             </h3>
             <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
-              {filterStatus 
+              {filterStatus && filterStatus !== 'ALL'
                 ? 'Tente ajustar os filtros' 
                 : 'Comece criando sua primeira comanda'}
             </p>
-            {!filterStatus && (
+            {(!filterStatus || filterStatus === 'ALL') && (
               <button className="btn btn-primary" onClick={openModal}>
                 <PlusCircle size={18} />
                 Criar Primeira Comanda
@@ -358,6 +375,9 @@ const Tabs = () => {
                 </div>
 
                 <div className="alert" style={{ background: 'var(--bg-dark)', border: 'none', marginBottom: '1.5rem' }}>
+                  <p className="text-sm text-muted">
+                    💡 Após criar a comanda, você poderá adicionar itens e produtos
+                  </p>
                 </div>
 
                 <div className="flex" style={{ gap: '1rem' }}>

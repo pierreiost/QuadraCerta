@@ -70,7 +70,7 @@ router.post('/', authMiddleware, async (req, res) => {
   try {
     let { clientId, reservationId } = req.body;
 
-    // ✅ CORREÇÃO: Limpar reservationId se vier vazio
+    // ✅ Limpar reservationId se vier vazio
     if (!reservationId || reservationId === '' || reservationId === 'null' || reservationId === 'undefined') {
       reservationId = null;
     }
@@ -121,7 +121,7 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Adicionar item à comanda
+// ✅ ADICIONAR ITEM - COM VALIDAÇÃO DE ESTOQUE
 router.post('/:id/items', authMiddleware, async (req, res) => {
   try {
     const { productId, description, quantity, unitPrice } = req.body;
@@ -147,6 +147,24 @@ router.post('/:id/items', authMiddleware, async (req, res) => {
 
     const qty = parseInt(quantity);
     const price = parseFloat(unitPrice);
+
+    // ✅ VALIDAÇÃO DE ESTOQUE AO ADICIONAR ITEM
+    if (productId) {
+      const product = await prisma.product.findUnique({
+        where: { id: productId }
+      });
+
+      if (!product) {
+        return res.status(404).json({ error: 'Produto não encontrado.' });
+      }
+
+      if (product.stock < qty) {
+        return res.status(400).json({ 
+          error: `Estoque insuficiente para ${product.name}. Disponível: ${product.stock} ${product.unit}` 
+        });
+      }
+    }
+
     const total = qty * price;
 
     const item = await prisma.tabItem.create({
@@ -223,7 +241,7 @@ router.delete('/:id/items/:itemId', authMiddleware, async (req, res) => {
   }
 });
 
-// Fechar comanda (finalizar pagamento)
+// ✅ FECHAR COMANDA - COM VALIDAÇÃO DE ESTOQUE APRIMORADA
 router.post('/:id/close', authMiddleware, async (req, res) => {
   try {
     const tab = await prisma.tab.findFirst({
@@ -244,43 +262,86 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Comanda já está fechada.' });
     }
 
-    // Atualizar estoque dos produtos
+    // ✅ VALIDAÇÃO COMPLETA DE ESTOQUE ANTES DE PROCESSAR
+    const itemsWithoutStock = [];
+    
     for (const item of tab.items) {
       if (item.productId) {
-        const product = item.product;
-        
-        if (product.stock < item.quantity) {
+        // Buscar produto ATUALIZADO do banco (pode ter mudado desde que o item foi adicionado)
+        const product = await prisma.product.findUnique({
+          where: { id: item.productId }
+        });
+
+        if (!product) {
           return res.status(400).json({ 
-            error: `Estoque insuficiente para ${product.name}` 
+            error: `Produto ${item.description} não encontrado no sistema` 
           });
         }
 
-        await prisma.product.update({
-          where: { id: product.id },
-          data: {
-            stock: product.stock - item.quantity
-          }
-        });
-
-        // Registrar movimentação de estoque
-        await prisma.stockMovement.create({
-          data: {
-            productId: product.id,
-            type: 'SAIDA',
-            quantity: item.quantity,
-            reason: `Venda - Comanda #${tab.id.substring(0, 8)}`
-          }
-        });
+        // ✅ VERIFICAÇÃO CRÍTICA: Estoque atual vs quantidade solicitada
+        if (product.stock < item.quantity) {
+          itemsWithoutStock.push({
+            name: product.name,
+            requested: item.quantity,
+            available: product.stock,
+            unit: product.unit
+          });
+        }
       }
     }
 
-    // Fechar comanda
-    const closedTab = await prisma.tab.update({
+    // ✅ SE HOUVER ITENS SEM ESTOQUE, RETORNA ERRO DETALHADO
+    if (itemsWithoutStock.length > 0) {
+      const errorMessages = itemsWithoutStock.map(item => 
+        `${item.name}: solicitado ${item.requested} ${item.unit}, disponível ${item.available} ${item.unit}`
+      ).join('; ');
+
+      return res.status(400).json({ 
+        error: `Estoque insuficiente para: ${errorMessages}`,
+        itemsWithoutStock
+      });
+    }
+
+    // ✅ SE PASSOU NA VALIDAÇÃO, PROCESSAR A VENDA EM TRANSAÇÃO
+    await prisma.$transaction(async (tx) => {
+      // Atualizar estoque dos produtos
+      for (const item of tab.items) {
+        if (item.productId) {
+          const product = item.product;
+
+          // Atualizar estoque
+          await tx.product.update({
+            where: { id: product.id },
+            data: {
+              stock: product.stock - item.quantity
+            }
+          });
+
+          // Registrar movimentação de estoque
+          await tx.stockMovement.create({
+            data: {
+              productId: product.id,
+              type: 'SAIDA',
+              quantity: item.quantity,
+              reason: `Venda - Comanda #${tab.id.substring(0, 8)}`
+            }
+          });
+        }
+      }
+
+      // Fechar comanda
+      await tx.tab.update({
+        where: { id: tab.id },
+        data: {
+          status: 'PAID',
+          paidAt: new Date()
+        }
+      });
+    });
+
+    // Buscar comanda atualizada para retornar
+    const closedTab = await prisma.tab.findUnique({
       where: { id: tab.id },
-      data: {
-        status: 'PAID',
-        paidAt: new Date()
-      },
       include: {
         client: true,
         reservation: { include: { court: true } },
@@ -290,7 +351,7 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
 
     res.json(closedTab);
   } catch (error) {
-    console.error(error);
+    console.error('Erro ao fechar comanda:', error);
     res.status(500).json({ error: 'Erro ao fechar comanda.' });
   }
 });
