@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import styles from '../styles/App.css';
 import {
   Calendar as CalendarIcon,
   Users,
@@ -11,35 +12,29 @@ import {
   X
 } from 'lucide-react';
 import { dashboardService, courtService, reservationService, clientService } from '../services/api';
-// import { format } from 'date-fns'; // Removido (não estava em uso)
 import { ptBR } from 'date-fns/locale';
 
-// --- IMPORTS DO FULLCALENDAR ---
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
-import interactionPlugin from '@fullcalendar/interaction'; // Para o clique no dia
-import timeGridPlugin from '@fullcalendar/timegrid'; // Para visualização de semana/dia
+import interactionPlugin from '@fullcalendar/interaction'; 
+import timeGridPlugin from '@fullcalendar/timegrid'; 
 import 'react-calendar/dist/Calendar.css'; 
-// --- FIM DOS IMPORTS ---
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [courts, setCourts] = useState([]);
-  const [clients, setClients] = useState([]); // Para o modal
+  const [clients, setClients] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // --- CORREÇÃO AQUI: Esta linha estava faltando ---
   const [showModal, setShowModal] = useState(false);
-  // --- FIM DA CORREÇÃO ---
 
-  // Estados para o modal de Nova Reserva
   const [formData, setFormData] = useState({
     courtId: '',
     clientId: '',
     startTime: '',
-    durationInHours: 1, // Padrão de 1 hora
+    durationInHours: 1, 
     isRecurring: false,
     frequency: 'WEEKLY',
     dayOfWeek: '',
@@ -59,13 +54,13 @@ const Dashboard = () => {
         dashboardService.getOverview(),
         courtService.getAll(),
         reservationService.getAll(),
-        clientService.getAll() // Precisamos dos clientes para o modal
+        clientService.getAll() 
       ]);
 
       setStats(statsRes.data);
       setCourts(courtsRes.data);
       setReservations(reservationsRes.data);
-      setClients(clientsRes.data); // Salva os clientes
+      setClients(clientsRes.data); 
 
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
@@ -75,7 +70,6 @@ const Dashboard = () => {
     }
   };
 
-  // Formata os dados para o FullCalendar
   const calendarEvents = useMemo(() => {
     return reservations
       .filter(res => res.status !== 'CANCELLED') 
@@ -88,7 +82,6 @@ const Dashboard = () => {
       }));
   }, [reservations]);
 
-  // --- LÓGICA DO MODAL ---
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -99,12 +92,12 @@ const Dashboard = () => {
   };
 
   const closeModal = () => {
-    setShowModal(false); // Agora 'setShowModal' existe
+    setShowModal(false); 
     setFormData({
       courtId: '',
       clientId: '',
       startTime: '',
-      durationInHours: 1, // Reseta para 1 hora
+      durationInHours: 1, 
       isRecurring: false,
       frequency: 'WEEKLY',
       dayOfWeek: '',
@@ -113,12 +106,10 @@ const Dashboard = () => {
     setError('');
   };
 
-  // Abre o modal com a data clicada
   const handleDateClick = (arg) => {
     const defaultStartTime = new Date(arg.date);
-    defaultStartTime.setHours(18, 0, 0, 0); // Define horário padrão (ex: 18:00)
+    defaultStartTime.setHours(18, 0, 0, 0); 
     
-    // Formata para 'yyyy-MM-ddThh:mm'
     const formatForInput = (date) => {
       const yyyy = date.getFullYear();
       const MM = String(date.getMonth() + 1).padStart(2, '0');
@@ -131,13 +122,12 @@ const Dashboard = () => {
     setFormData({
       ...formData,
       startTime: formatForInput(defaultStartTime),
-      durationInHours: 1, // Garante que a duração seja 1
+      durationInHours: 1, 
     });
-    setShowModal(true); // Agora 'setShowModal' existe
+    setShowModal(true); 
     setError('');
   };
 
-  // Navega para a página de reservas
   const handleEventClick = (info) => {
     navigate('/reservations');
   };
@@ -150,14 +140,13 @@ const Dashboard = () => {
       await reservationService.create(formData);
       setSuccess('Reserva criada com sucesso!');
       closeModal();
-      loadDashboardData(); // Recarrega os dados para o calendário
+      loadDashboardData();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.error || 'Erro ao criar reserva');
     }
   };
 
-  // --- FIM DA LÓGICA DO MODAL ---
 
   if (loading) {
     return (
@@ -179,13 +168,11 @@ const Dashboard = () => {
         {success && (
           <div className="alert alert-success">{success}</div>
         )}
-        {error && !showModal && ( // Agora 'showModal' existe
+        {error && !showModal && (
           <div className="alert alert-danger">{error}</div>
         )}
 
-        {/* Cards de Status */}
         <div className="grid grid-4" style={{ marginBottom: '2rem' }}>
-          {/* Card Total de Quadras */}
           <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/courts')}>
             <div className="flex-between">
               <div>
@@ -207,7 +194,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Card Clientes */}
           <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/clients')}>
             <div className="flex-between">
               <div>
@@ -229,7 +215,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Card Reservas Ativas */}
           <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/reservations')}>
             <div className="flex-between">
               <div>
@@ -251,7 +236,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Card Comandas Abertas */}
           <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/tabs')}>
             <div className="flex-between">
               <div>
@@ -274,11 +258,10 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Botões de Ação Rápida */}
         <div className="grid grid-4" style={{ marginBottom: '2rem' }}>
           <button 
             className="btn btn-primary"
-            onClick={() => setShowModal(true)} // Agora 'setShowModal' existe
+            onClick={() => setShowModal(true)}
             style={{ width: '100%' }}
           >
             <PlusCircle size={18} />
@@ -312,27 +295,48 @@ const Dashboard = () => {
 
         {/* Calendário */}
         <div className="card" style={{ padding: '2rem' }}>
-        <FullCalendar
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
-          }}
-          locale={ptBR}
-          events={calendarEvents}
-          dateClick={handleDateClick}
-          eventClick={handleEventClick}
-          height="auto"
-          contentHeight="auto"
-          buttonText={{
-            today: 'Hoje',
-            month: 'Mês',
-            week: 'Semana',
-            day: 'Dia'
-          }}
-        />
+          <div className="calendar-container">
+            <FullCalendar
+              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+              initialView="dayGridMonth"
+              headerToolbar={{
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+              }}
+              locale={ptBR}
+              events={calendarEvents}
+              dateClick={handleDateClick}
+              eventClick={handleEventClick}
+              
+              height="auto"
+              contentHeight="auto"
+              aspectRatio={1.5}
+              handleWindowResize={true}
+              windowResizeDelay={100}
+              
+              dayMaxEvents={3}
+              moreLinkClick="popover"
+              
+              buttonText={{
+                today: 'Hoje',
+                month: 'Mês',
+                week: 'Semana',
+                day: 'Dia'
+              }}
+              allDayText="Dia todo"
+              noEventsText="Sem reservas"
+              
+              views={{
+                dayGridMonth: {
+                  dayMaxEvents: 2
+                },
+                timeGridWeek: {
+                  dayMaxEvents: 4
+                }
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -350,8 +354,7 @@ const Dashboard = () => {
         </div>
       </footer>
 
-      {/* Modal de Nova Reserva */}
-      {showModal && ( // Agora 'showModal' existe
+      {showModal && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="card" style={{ margin: 0 }}>
