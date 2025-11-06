@@ -14,6 +14,7 @@ import Tabs from './pages/Tabs';
 import TabDetails from './pages/TabDetails';
 import Profile from './pages/Profile'; // Importa a página de Perfil
 import './styles/App.css';
+import Users from './pages/Users';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -48,103 +49,111 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route 
-            path="/login" 
+          <Route
+            path="/login"
             element={
               <PublicRoute>
                 <Login />
               </PublicRoute>
-            } 
+            }
           />
-          <Route 
-            path="/register" 
+          <Route
+            path="/register"
             element={
               <PublicRoute>
                 <Register />
               </PublicRoute>
-            } 
+            }
           />
-          <Route 
-            path="/dashboard" 
+          <Route
+            path="/dashboard"
             element={
               <PrivateRoute>
                 <Dashboard />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/courts" 
+          <Route
+            path="/users"
+            element={
+              <PrivateRoute>
+                <Users />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/courts"
             element={
               <PrivateRoute>
                 <Courts />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/courts/:id" 
+          <Route
+            path="/courts/:id"
             element={
               <PrivateRoute>
                 <Courts />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/clients" 
+          <Route
+            path="/clients"
             element={
               <PrivateRoute>
                 <Clients />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/reservations" 
+          <Route
+            path="/reservations"
             element={
               <PrivateRoute>
                 <Reservations />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/agenda" 
+          <Route
+            path="/agenda"
             element={
               <PrivateRoute>
                 <Reservations />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/products" 
+          <Route
+            path="/products"
             element={
               <PrivateRoute>
                 <Products />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/tabs" 
+          <Route
+            path="/tabs"
             element={
               <PrivateRoute>
                 <Tabs />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/tabs/:id" 
+          <Route
+            path="/tabs/:id"
             element={
               <PrivateRoute>
                 <TabDetails />
               </PrivateRoute>
-            } 
+            }
           />
-          
+
           {/* Rota de perfil que adicionamos */}
-          <Route 
-            path="/profile" 
+          <Route
+            path="/profile"
             element={
               <PrivateRoute>
                 <Profile />
               </PrivateRoute>
-            } 
+            }
           />
 
           <Route path="/" element={<Navigate to="/dashboard" />} />

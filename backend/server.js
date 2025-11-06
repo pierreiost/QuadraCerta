@@ -7,7 +7,7 @@ const xss = require('xss-clean');
 const hpp = require('hpp');
 const rateLimit = require('express-rate-limit');
 const { PrismaClient } = require('@prisma/client');
-
+const userRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
 const courtRoutes = require('./routes/courts');
 const clientRoutes = require('./routes/clients');
@@ -110,7 +110,7 @@ app.use('/api/reservations', reservationRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/tabs', tabRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-
+app.use('/api/users', userRoutes);
 // Rota de health check (sem rate limit)
 app.get('/api/health', (req, res) => {
   res.json({ 

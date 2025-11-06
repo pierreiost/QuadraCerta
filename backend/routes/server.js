@@ -6,7 +6,6 @@ const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
 const { PrismaClient } = require('@prisma/client');
-
 const authRoutes = require('./routes/auth');
 const courtRoutes = require('./routes/courts');
 const clientRoutes = require('./routes/clients');
@@ -53,28 +52,18 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Body parser com limite de tamanho
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Sanitização contra NoSQL injection
 app.use(mongoSanitize());
 
-// Proteção contra XSS
 app.use(xss());
 
-// Proteção contra poluição de parâmetros HTTP
 app.use(hpp());
 
-// Disponibilizar Prisma globalmente
 app.locals.prisma = prisma;
 
-// ============================================
-// ROTAS - SEM rate limiting geral
-// ============================================
 
-// Rotas de autenticação
-// O rate limiting está DENTRO do auth.js apenas na rota de login
 app.use('/api/auth', authRoutes);
 
 // Demais rotas SEM rate limiting

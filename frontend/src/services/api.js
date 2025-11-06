@@ -77,9 +77,9 @@ export const productService = {
   create: (data) => api.post('/products', data),
   update: (id, data) => api.put(`/products/${id}`, data),
   delete: (id) => api.delete(`/products/${id}`),
-  addStock: (id, quantity, reason) => 
+  addStock: (id, quantity, reason) =>
     api.post(`/products/${id}/stock/add`, { quantity, reason }),
-  removeStock: (id, quantity, reason) => 
+  removeStock: (id, quantity, reason) =>
     api.post(`/products/${id}/stock/remove`, { quantity, reason }),
 };
 
@@ -100,6 +100,16 @@ export const dashboardService = {
   getUpcoming: () => api.get('/dashboard/upcoming'),
   getRevenue: (params) => api.get('/dashboard/revenue', { params }),
   getOccupancy: (params) => api.get('/dashboard/occupancy', { params }),
+};
+
+export const userService = {
+  getAll: () => api.get('/users'),
+  getById: (id) => api.get(`/users/${id}`),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
+  resetPassword: (id, newPassword) =>
+    api.put(`/users/${id}/reset-password`, { newPassword }),
 };
 
 export default api;
