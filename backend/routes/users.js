@@ -121,7 +121,8 @@ router.post('/', authMiddleware, checkPermission('users', 'create'), userValidat
       });
     }
 
-    const { firstName, lastName, email, password, phone, cpf, role } = req.body;
+    // NOVO: capture permissionIds do body
+    const { firstName, lastName, email, password, phone, cpf, role, permissionIds } = req.body;
 
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() }
@@ -159,6 +160,16 @@ router.post('/', authMiddleware, checkPermission('users', 'create'), userValidat
         createdAt: true
       }
     });
+
+    // NOVO: Bloco para salvar as permissões
+    if (user.role === 'SEMI_ADMIN' && Array.isArray(permissionIds) && permissionIds.length > 0) {
+      await prisma.userPermission.createMany({
+        data: permissionIds.map(permissionId => ({
+          userId: user.id,
+          permissionId: permissionId
+        }))
+      });
+    }
 
     res.status(201).json(user);
   } catch (error) {

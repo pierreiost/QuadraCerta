@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import MaskedInput from '../components/MaskedInput'; // NOVO: Importado
 
 const Register = () => {
   const navigate = useNavigate();
@@ -490,8 +491,8 @@ const Register = () => {
                     }}>
                       Telefone *
                     </label>
-                    <input
-                      type="tel"
+                    <MaskedInput
+                      mask="phone"
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
@@ -530,8 +531,8 @@ const Register = () => {
                     }}>
                       CPF (Opcional)
                     </label>
-                    <input
-                      type="text"
+                    <MaskedInput
+                      mask="cpf"
                       name="cpf"
                       value={formData.cpf}
                       onChange={handleChange}
@@ -570,8 +571,8 @@ const Register = () => {
                   }}>
                     CNPJ do Complexo *
                   </label>
-                  <input
-                    type="text"
+                  <MaskedInput
+                    mask="cnpj"
                     name="cnpj"
                     value={formData.cnpj}
                     onChange={handleChange}

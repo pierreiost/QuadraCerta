@@ -133,7 +133,18 @@ const UsersPage = () => {
         cpf: '',
         role: 'SEMI_ADMIN'
       });
-      setSelectedPermissions([]);
+      
+      // NOVO: Carregar permissões padrão de "visualizar"
+      try {
+        const response = await permissionService.getAll();
+        const viewPermIds = response.data.permissions
+          .filter(p => p.action === 'view') // Filtra apenas permissões 'view'
+          .map(p => p.id); // Pega os IDs
+        setSelectedPermissions(viewPermIds); // Define como selecionadas
+      } catch (err) {
+        console.error("Erro ao carregar permissões padrão", err);
+        setSelectedPermissions([]); // Em caso de erro, começa vazio
+      }
     }
 
     setActiveTab('info'); // NOVO: Sempre começa na aba de informações
@@ -266,7 +277,12 @@ const UsersPage = () => {
         await userService.update(editingUser.id, formData);
         setSuccess('Usuário atualizado com sucesso!');
       } else {
-        await userService.create(formData);
+        // NOVO: Enviar permissões na criação
+        const createData = {
+          ...formData,
+          permissionIds: selectedPermissions // Adiciona os IDs das permissões
+        };
+        await userService.create(createData);
         setSuccess('Usuário cadastrado com sucesso!');
       }
       closeModal();
@@ -499,8 +515,8 @@ const UsersPage = () => {
                 {error && <div className="alert alert-danger">{error}</div>}
                 {success && <div className="alert alert-success">{success}</div>}
 
-                {/* NOVO: Tabs */}
-                {editingUser && formData.role === 'SEMI_ADMIN' && (
+                {/* NOVO: Tabs (modificado para aparecer na criação) */}
+                {formData.role === 'SEMI_ADMIN' && (
                   <div style={{
                     display: 'flex',
                     gap: '1rem',
@@ -596,7 +612,7 @@ const UsersPage = () => {
                       <div className="input-group">
                         <label htmlFor="phone">Telefone *</label>
                         <MaskedInput
-                          mask="(99) 99999-9999"
+                          mask="phone"
                           id="phone"
                           name="phone"
                           value={formData.phone}
@@ -610,7 +626,7 @@ const UsersPage = () => {
                       <div className="input-group">
                         <label htmlFor="cpf">CPF (Opcional)</label>
                         <MaskedInput
-                          mask="999.999.999-99"
+                          mask="cpf"
                           id="cpf"
                           name="cpf"
                           value={formData.cpf}
@@ -699,12 +715,11 @@ const UsersPage = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => savePermissions(editingUser.id)}
+                        onClick={() => editingUser ? savePermissions(editingUser.id) : setActiveTab('info')}
                         className="btn btn-primary"
                         style={{ flex: 1 }}
                       >
-                        <Shield size={18} />
-                        Salvar Permissões
+                        {editingUser ? <><Shield size={18} /> Salvar Permissões</> : 'Salvar e Próximo'}
                       </button>
                     </div>
                   </div>
