@@ -1,27 +1,27 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Listar produtos do complexo
-router.get('/', authMiddleware, async (req, res) => {
+// Listar produtos
+router.get('/', authMiddleware, checkPermission('products', 'view'), async (req, res) => {
   try {
     const products = await prisma.product.findMany({
       where: { complexId: req.user.complexId },
       orderBy: { name: 'asc' }
     });
-
     res.json(products);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro ao buscar produtos.' });
+    res.status(500).json({ error: 'Erro ao listar produtos.' });
   }
 });
 
-// Buscar produto por ID
-router.get('/:id', authMiddleware, async (req, res) => {
+// Buscar produto específico
+router.get('/:id', authMiddleware, checkPermission('products', 'view'), async (req, res) => {
   try {
     const product = await prisma.product.findFirst({
       where: {
@@ -47,12 +47,12 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Criar novo produto
-router.post('/', authMiddleware, async (req, res) => {
+// Criar produto
+router.post('/', authMiddleware, checkPermission('products', 'create'), async (req, res) => {
   try {
     const { name, description, price, stock, unit, expiryDate } = req.body;
 
-    if (!name || price === undefined || stock === undefined || !unit) {
+    if (!name || !price || !unit) {
       return res.status(400).json({ error: 'Campos obrigatórios não preenchidos.' });
     }
 
@@ -61,24 +61,12 @@ router.post('/', authMiddleware, async (req, res) => {
         name,
         description,
         price: parseFloat(price),
-        stock: parseInt(stock),
+        stock: stock ? parseInt(stock) : 0,
         unit,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         complexId: req.user.complexId
       }
     });
-
-    // Registrar movimentação inicial de estoque
-    if (stock > 0) {
-      await prisma.stockMovement.create({
-        data: {
-          productId: product.id,
-          type: 'ENTRADA',
-          quantity: parseInt(stock),
-          reason: 'Estoque inicial'
-        }
-      });
-    }
 
     res.status(201).json(product);
   } catch (error) {
@@ -88,9 +76,9 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // Atualizar produto
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('products', 'edit'), async (req, res) => {
   try {
-    const { name, description, price, unit, expiryDate } = req.body;
+    const { name, description, price, stock, unit, expiryDate } = req.body;
 
     const product = await prisma.product.findFirst({
       where: {
@@ -108,9 +96,10 @@ router.put('/:id', authMiddleware, async (req, res) => {
       data: {
         name,
         description,
-        price: price !== undefined ? parseFloat(price) : undefined,
+        price: parseFloat(price),
+        stock: parseInt(stock),
         unit,
-        expiryDate: expiryDate ? new Date(expiryDate) : undefined
+        expiryDate: expiryDate ? new Date(expiryDate) : null
       }
     });
 
@@ -121,102 +110,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Adicionar estoque (entrada)
-router.post('/:id/stock/add', authMiddleware, async (req, res) => {
-  try {
-    const { quantity, reason } = req.body;
-
-    if (!quantity || quantity <= 0) {
-      return res.status(400).json({ error: 'Quantidade inválida.' });
-    }
-
-    const product = await prisma.product.findFirst({
-      where: {
-        id: req.params.id,
-        complexId: req.user.complexId
-      }
-    });
-
-    if (!product) {
-      return res.status(404).json({ error: 'Produto não encontrado.' });
-    }
-
-    // Atualizar estoque
-    const updatedProduct = await prisma.product.update({
-      where: { id: req.params.id },
-      data: {
-        stock: product.stock + parseInt(quantity)
-      }
-    });
-
-    // Registrar movimentação
-    await prisma.stockMovement.create({
-      data: {
-        productId: product.id,
-        type: 'ENTRADA',
-        quantity: parseInt(quantity),
-        reason: reason || 'Entrada manual'
-      }
-    });
-
-    res.json(updatedProduct);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao adicionar estoque.' });
-  }
-});
-
-// Remover estoque (saída)
-router.post('/:id/stock/remove', authMiddleware, async (req, res) => {
-  try {
-    const { quantity, reason } = req.body;
-
-    if (!quantity || quantity <= 0) {
-      return res.status(400).json({ error: 'Quantidade inválida.' });
-    }
-
-    const product = await prisma.product.findFirst({
-      where: {
-        id: req.params.id,
-        complexId: req.user.complexId
-      }
-    });
-
-    if (!product) {
-      return res.status(404).json({ error: 'Produto não encontrado.' });
-    }
-
-    if (product.stock < quantity) {
-      return res.status(400).json({ error: 'Estoque insuficiente.' });
-    }
-
-    // Atualizar estoque
-    const updatedProduct = await prisma.product.update({
-      where: { id: req.params.id },
-      data: {
-        stock: product.stock - parseInt(quantity)
-      }
-    });
-
-    // Registrar movimentação
-    await prisma.stockMovement.create({
-      data: {
-        productId: product.id,
-        type: 'SAIDA',
-        quantity: parseInt(quantity),
-        reason: reason || 'Saída manual'
-      }
-    });
-
-    res.json(updatedProduct);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao remover estoque.' });
-  }
-});
-
 // Deletar produto
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('products', 'delete'), async (req, res) => {
   try {
     const product = await prisma.product.findFirst({
       where: {
@@ -237,6 +132,96 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao deletar produto.' });
+  }
+});
+
+// Adicionar estoque
+router.post('/:id/stock/add', authMiddleware, checkPermission('products', 'stock'), async (req, res) => {
+  try {
+    const { quantity, reason } = req.body;
+
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ error: 'Quantidade inválida.' });
+    }
+
+    const product = await prisma.product.findFirst({
+      where: {
+        id: req.params.id,
+        complexId: req.user.complexId
+      }
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Produto não encontrado.' });
+    }
+
+    const updatedProduct = await prisma.product.update({
+      where: { id: req.params.id },
+      data: {
+        stock: product.stock + parseInt(quantity)
+      }
+    });
+
+    await prisma.stockMovement.create({
+      data: {
+        productId: req.params.id,
+        type: 'ENTRADA',
+        quantity: parseInt(quantity),
+        reason
+      }
+    });
+
+    res.json(updatedProduct);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao adicionar estoque.' });
+  }
+});
+
+// Remover estoque
+router.post('/:id/stock/remove', authMiddleware, checkPermission('products', 'stock'), async (req, res) => {
+  try {
+    const { quantity, reason } = req.body;
+
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ error: 'Quantidade inválida.' });
+    }
+
+    const product = await prisma.product.findFirst({
+      where: {
+        id: req.params.id,
+        complexId: req.user.complexId
+      }
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Produto não encontrado.' });
+    }
+
+    if (product.stock < parseInt(quantity)) {
+      return res.status(400).json({ error: 'Estoque insuficiente.' });
+    }
+
+    const updatedProduct = await prisma.product.update({
+      where: { id: req.params.id },
+      data: {
+        stock: product.stock - parseInt(quantity)
+      }
+    });
+
+    await prisma.stockMovement.create({
+      data: {
+        productId: req.params.id,
+        type: 'SAIDA',
+        quantity: parseInt(quantity),
+        reason
+      }
+    });
+
+    res.json(updatedProduct);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao remover estoque.' });
   }
 });
 

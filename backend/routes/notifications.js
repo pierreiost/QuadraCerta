@@ -1,18 +1,21 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
-const { addHours, subMinutes, isAfter, isBefore, format } = require('date-fns');
+const { addHours, subMinutes } = require('date-fns');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Obter todas as notificações do complexo
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const notifications = [];
     const now = new Date();
-    const in30Minutes = addHours(now, 0.5);
-    const in24Hours = addHours(now, 24);
+    const in30Minutes = new Date(now.getTime() + 30 * 60 * 1000);
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    console.log('🔔 Buscando notificações...');
+    console.log('⏰ Hora atual:', now.toISOString());
+    console.log('⏰ +30min:', in30Minutes.toISOString());
 
     // 1. ESTOQUE BAIXO (< 10 unidades)
     const lowStockProducts = await prisma.product.findMany({
@@ -27,6 +30,8 @@ router.get('/', authMiddleware, async (req, res) => {
         unit: true
       }
     });
+
+    console.log(`📦 Produtos com estoque baixo: ${lowStockProducts.length}`);
 
     lowStockProducts.forEach(product => {
       notifications.push({
@@ -57,8 +62,15 @@ router.get('/', authMiddleware, async (req, res) => {
       orderBy: { startTime: 'asc' }
     });
 
+    console.log(`📅 Reservas nos próximos 30min: ${upcomingReservations.length}`);
+    upcomingReservations.forEach(r => {
+      console.log(`  - ${r.client.fullName}: ${new Date(r.startTime).toISOString()}`);
+    });
+
     upcomingReservations.forEach(reservation => {
-      const minutesUntil = Math.round((new Date(reservation.startTime) - now) / (1000 * 60));
+      const reservationTime = new Date(reservation.startTime);
+      const minutesUntil = Math.round((reservationTime - now) / (1000 * 60));
+      
       notifications.push({
         id: `reservation-${reservation.id}`,
         type: 'UPCOMING_RESERVATION',
@@ -71,7 +83,7 @@ router.get('/', authMiddleware, async (req, res) => {
     });
 
     // 3. COMANDAS ABERTAS HÁ MUITO TEMPO (> 4 horas)
-    const fourHoursAgo = subMinutes(now, 240);
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
     const oldOpenTabs = await prisma.tab.findMany({
       where: {
         client: { complexId: req.user.complexId },
@@ -83,6 +95,8 @@ router.get('/', authMiddleware, async (req, res) => {
       },
       orderBy: { createdAt: 'asc' }
     });
+
+    console.log(`💰 Comandas antigas: ${oldOpenTabs.length}`);
 
     oldOpenTabs.forEach(tab => {
       const hoursOpen = Math.round((now - new Date(tab.createdAt)) / (1000 * 60 * 60));
@@ -110,6 +124,8 @@ router.get('/', authMiddleware, async (req, res) => {
       }
     });
 
+    console.log(`🔧 Quadras em manutenção: ${maintenanceCourts.length}`);
+
     maintenanceCourts.forEach(court => {
       notifications.push({
         id: `maintenance-${court.id}`,
@@ -123,7 +139,7 @@ router.get('/', authMiddleware, async (req, res) => {
     });
 
     // 5. PRODUTOS PRÓXIMOS DO VENCIMENTO (próximos 7 dias)
-    const in7Days = addHours(now, 168);
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const expiringProducts = await prisma.product.findMany({
       where: {
         complexId: req.user.complexId,
@@ -139,6 +155,8 @@ router.get('/', authMiddleware, async (req, res) => {
         stock: true
       }
     });
+
+    console.log(`⚠️ Produtos vencendo: ${expiringProducts.length}`);
 
     expiringProducts.forEach(product => {
       const daysUntilExpiry = Math.ceil((new Date(product.expiryDate) - now) / (1000 * 60 * 60 * 24));
@@ -166,6 +184,8 @@ router.get('/', authMiddleware, async (req, res) => {
       }
     });
 
+    console.log(`📋 Reservas pendentes: ${pendingReservations.length}`);
+
     pendingReservations.forEach(reservation => {
       notifications.push({
         id: `pending-${reservation.id}`,
@@ -178,7 +198,6 @@ router.get('/', authMiddleware, async (req, res) => {
       });
     });
 
-    // Ordenar por prioridade e data
     const priorityOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 };
     notifications.sort((a, b) => {
       if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
@@ -186,6 +205,8 @@ router.get('/', authMiddleware, async (req, res) => {
       }
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
+
+    console.log(`✅ Total de notificações: ${notifications.length}`);
 
     res.json({
       notifications,
@@ -199,43 +220,38 @@ router.get('/', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erro ao buscar notificações:', error);
+    console.error('❌ Erro ao buscar notificações:', error);
     res.status(500).json({ error: 'Erro ao buscar notificações' });
   }
 });
 
-// Obter resumo de notificações (para o badge no header)
 router.get('/summary', authMiddleware, async (req, res) => {
   try {
     const now = new Date();
     let count = 0;
 
-    // Contar alertas críticos
     const criticalAlerts = await Promise.all([
-      // Estoque zerado
       prisma.product.count({
         where: {
           complexId: req.user.complexId,
           stock: 0
         }
       }),
-      // Reservas nos próximos 15 minutos
       prisma.reservation.count({
         where: {
           court: { complexId: req.user.complexId },
           status: 'CONFIRMED',
           startTime: {
             gte: now,
-            lte: addHours(now, 0.25)
+            lte: new Date(now.getTime() + 15 * 60 * 1000)
           }
         }
       }),
-      // Comandas abertas há mais de 6 horas
       prisma.tab.count({
         where: {
           client: { complexId: req.user.complexId },
           status: 'OPEN',
-          createdAt: { lte: subMinutes(now, 360) }
+          createdAt: { lte: new Date(now.getTime() - 6 * 60 * 60 * 1000) }
         }
       })
     ]);
@@ -245,7 +261,7 @@ router.get('/summary', authMiddleware, async (req, res) => {
     res.json({ count });
 
   } catch (error) {
-    console.error('Erro ao buscar resumo de notificações:', error);
+    console.error('❌ Erro ao buscar resumo de notificações:', error);
     res.status(500).json({ error: 'Erro ao buscar resumo' });
   }
 });

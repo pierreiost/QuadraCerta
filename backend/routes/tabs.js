@@ -1,12 +1,13 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // Listar comandas do complexo
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('tabs', 'view'), async (req, res) => {
   try {
     const { status, clientId } = req.query;
     
@@ -40,7 +41,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // Buscar comanda por ID
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, checkPermission('tabs', 'view'), async (req, res) => {
   try {
     const tab = await prisma.tab.findFirst({
       where: {
@@ -66,11 +67,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // Criar nova comanda
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('tabs', 'create'), async (req, res) => {
   try {
     let { clientId, reservationId } = req.body;
 
-    // ✅ Limpar reservationId se vier vazio
     if (!reservationId || reservationId === '' || reservationId === 'null' || reservationId === 'undefined') {
       reservationId = null;
     }
@@ -79,7 +79,6 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Cliente é obrigatório.' });
     }
 
-    // Verificar se cliente pertence ao complexo
     const client = await prisma.client.findFirst({
       where: { id: clientId, complexId: req.user.complexId }
     });
@@ -88,7 +87,6 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Cliente não encontrado.' });
     }
 
-    // Verificar reserva se fornecida
     if (reservationId) {
       const reservation = await prisma.reservation.findFirst({
         where: {
@@ -121,8 +119,8 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ ADICIONAR ITEM - COM VALIDAÇÃO DE ESTOQUE
-router.post('/:id/items', authMiddleware, async (req, res) => {
+// Adicionar item
+router.post('/:id/items', authMiddleware, checkPermission('tabs', 'edit'), async (req, res) => {
   try {
     const { productId, description, quantity, unitPrice } = req.body;
 
@@ -148,7 +146,6 @@ router.post('/:id/items', authMiddleware, async (req, res) => {
     const qty = parseInt(quantity);
     const price = parseFloat(unitPrice);
 
-    // ✅ VALIDAÇÃO DE ESTOQUE AO ADICIONAR ITEM
     if (productId) {
       const product = await prisma.product.findUnique({
         where: { id: productId }
@@ -181,7 +178,6 @@ router.post('/:id/items', authMiddleware, async (req, res) => {
       }
     });
 
-    // Atualizar total da comanda
     await prisma.tab.update({
       where: { id: tab.id },
       data: {
@@ -197,7 +193,7 @@ router.post('/:id/items', authMiddleware, async (req, res) => {
 });
 
 // Remover item da comanda
-router.delete('/:id/items/:itemId', authMiddleware, async (req, res) => {
+router.delete('/:id/items/:itemId', authMiddleware, checkPermission('tabs', 'edit'), async (req, res) => {
   try {
     const tab = await prisma.tab.findFirst({
       where: {
@@ -226,7 +222,6 @@ router.delete('/:id/items/:itemId', authMiddleware, async (req, res) => {
       where: { id: req.params.itemId }
     });
 
-    // Atualizar total da comanda
     await prisma.tab.update({
       where: { id: tab.id },
       data: {
@@ -241,8 +236,8 @@ router.delete('/:id/items/:itemId', authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ FECHAR COMANDA - COM VALIDAÇÃO DE ESTOQUE APRIMORADA
-router.post('/:id/close', authMiddleware, async (req, res) => {
+// Fechar comanda
+router.post('/:id/close', authMiddleware, checkPermission('tabs', 'close'), async (req, res) => {
   try {
     const tab = await prisma.tab.findFirst({
       where: {
@@ -262,12 +257,10 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Comanda já está fechada.' });
     }
 
-    // ✅ VALIDAÇÃO COMPLETA DE ESTOQUE ANTES DE PROCESSAR
     const itemsWithoutStock = [];
     
     for (const item of tab.items) {
       if (item.productId) {
-        // Buscar produto ATUALIZADO do banco (pode ter mudado desde que o item foi adicionado)
         const product = await prisma.product.findUnique({
           where: { id: item.productId }
         });
@@ -278,7 +271,6 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
           });
         }
 
-        // ✅ VERIFICAÇÃO CRÍTICA: Estoque atual vs quantidade solicitada
         if (product.stock < item.quantity) {
           itemsWithoutStock.push({
             name: product.name,
@@ -290,7 +282,6 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
       }
     }
 
-    // ✅ SE HOUVER ITENS SEM ESTOQUE, RETORNA ERRO DETALHADO
     if (itemsWithoutStock.length > 0) {
       const errorMessages = itemsWithoutStock.map(item => 
         `${item.name}: solicitado ${item.requested} ${item.unit}, disponível ${item.available} ${item.unit}`
@@ -302,14 +293,11 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
       });
     }
 
-    // ✅ SE PASSOU NA VALIDAÇÃO, PROCESSAR A VENDA EM TRANSAÇÃO
     await prisma.$transaction(async (tx) => {
-      // Atualizar estoque dos produtos
       for (const item of tab.items) {
         if (item.productId) {
           const product = item.product;
 
-          // Atualizar estoque
           await tx.product.update({
             where: { id: product.id },
             data: {
@@ -317,7 +305,6 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
             }
           });
 
-          // Registrar movimentação de estoque
           await tx.stockMovement.create({
             data: {
               productId: product.id,
@@ -329,7 +316,6 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
         }
       }
 
-      // Fechar comanda
       await tx.tab.update({
         where: { id: tab.id },
         data: {
@@ -339,7 +325,6 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
       });
     });
 
-    // Buscar comanda atualizada para retornar
     const closedTab = await prisma.tab.findUnique({
       where: { id: tab.id },
       include: {
@@ -357,7 +342,7 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
 });
 
 // Cancelar comanda
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('tabs', 'cancel'), async (req, res) => {
   try {
     const tab = await prisma.tab.findFirst({
       where: {

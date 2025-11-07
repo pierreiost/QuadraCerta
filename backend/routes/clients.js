@@ -1,32 +1,27 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Listar clientes do complexo
-router.get('/', authMiddleware, async (req, res) => {
+// Listar clientes
+router.get('/', authMiddleware, checkPermission('clients', 'view'), async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
       where: { complexId: req.user.complexId },
-      orderBy: { fullName: 'asc' },
-      include: {
-        _count: {
-          select: { reservations: true, tabs: true }
-        }
-      }
+      orderBy: { fullName: 'asc' }
     });
-
     res.json(clients);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro ao buscar clientes.' });
+    res.status(500).json({ error: 'Erro ao listar clientes.' });
   }
 });
 
-// Buscar cliente por ID com histórico
-router.get('/:id', authMiddleware, async (req, res) => {
+// Buscar cliente com histórico
+router.get('/:id', authMiddleware, checkPermission('clients', 'view'), async (req, res) => {
   try {
     const client = await prisma.client.findFirst({
       where: {
@@ -35,12 +30,15 @@ router.get('/:id', authMiddleware, async (req, res) => {
       },
       include: {
         reservations: {
-          include: { court: true },
-          orderBy: { startTime: 'desc' }
+          include: {
+            court: true
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10
         },
         tabs: {
-          include: { items: true },
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          take: 10
         }
       }
     });
@@ -56,8 +54,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Criar novo cliente
-router.post('/', authMiddleware, async (req, res) => {
+// Criar cliente
+router.post('/', authMiddleware, checkPermission('clients', 'create'), async (req, res) => {
   try {
     const { fullName, phone, email, cpf } = req.body;
 
@@ -69,8 +67,8 @@ router.post('/', authMiddleware, async (req, res) => {
       data: {
         fullName,
         phone,
-        email,
-        cpf,
+        email: email || null,
+        cpf: cpf || null,
         complexId: req.user.complexId
       }
     });
@@ -83,7 +81,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // Atualizar cliente
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('clients', 'edit'), async (req, res) => {
   try {
     const { fullName, phone, email, cpf } = req.body;
 
@@ -100,7 +98,12 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     const updatedClient = await prisma.client.update({
       where: { id: req.params.id },
-      data: { fullName, phone, email, cpf }
+      data: {
+        fullName,
+        phone,
+        email: email || null,
+        cpf: cpf || null
+      }
     });
 
     res.json(updatedClient);
@@ -111,7 +114,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // Deletar cliente
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('clients', 'delete'), async (req, res) => {
   try {
     const client = await prisma.client.findFirst({
       where: {

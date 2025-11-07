@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import MaskedInput from '../components/MaskedInput';
-import { userService } from '../services/api';
-import { Users, Edit2, Trash2, PlusCircle, X, User, Phone, Mail, Check, Key } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import PermissionCheckboxes from '../components/PermissionCheckboxes';
+import { userService, permissionService } from '../services/api';
+import {
+  Users as UsersIcon,
+  PlusCircle,
+  Edit2,
+  Trash2,
+  X,
+  Check,
+  Key,
+  Shield,
+  User,
+  Mail,
+  Phone
+} from 'lucide-react';
 
 const UsersPage = () => {
   const [users, setUsers] = useState([]);
@@ -29,6 +42,8 @@ const UsersPage = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [selectedPermissions, setSelectedPermissions] = useState([]);
+  const [activeTab, setActiveTab] = useState('info'); // 'info' ou 'permissions'
 
   useEffect(() => {
     loadUsers();
@@ -46,6 +61,7 @@ const UsersPage = () => {
   }, [showModal, showResetPasswordModal]);
 
   const loadUsers = async () => {
+    setLoading(true);
     try {
       const response = await userService.getAll();
       setUsers(response.data);
@@ -63,14 +79,14 @@ const UsersPage = () => {
       ...formData,
       [name]: value
     });
-    
+
     if (fieldErrors[name]) {
       setFieldErrors({
         ...fieldErrors,
         [name]: ''
       });
     }
-    
+
     if (error) setError('');
   };
 
@@ -80,11 +96,11 @@ const UsersPage = () => {
       ...resetPasswordData,
       [name]: value
     });
-    
+
     if (error) setError('');
   };
 
-  const openModal = (user = null) => {
+  const openModal = async (user = null) => {
     if (user) {
       setEditingUser(user);
       setFormData({
@@ -96,6 +112,16 @@ const UsersPage = () => {
         cpf: user.cpf || '',
         role: user.role
       });
+
+      // NOVO: Carregar permissões se for SEMI_ADMIN
+      if (user.role === 'SEMI_ADMIN') {
+        try {
+          const response = await permissionService.getUserPermissions(user.id);
+          setSelectedPermissions(response.data.permissionIds || []);
+        } catch (error) {
+          console.error('Erro ao carregar permissões:', error);
+        }
+      }
     } else {
       setEditingUser(null);
       setFormData({
@@ -107,7 +133,10 @@ const UsersPage = () => {
         cpf: '',
         role: 'SEMI_ADMIN'
       });
+      setSelectedPermissions([]);
     }
+
+    setActiveTab('info'); // NOVO: Sempre começa na aba de informações
     setShowModal(true);
     setError('');
     setFieldErrors({});
@@ -131,12 +160,12 @@ const UsersPage = () => {
 
   const handleModalClose = () => {
     const hasData = formData.firstName || formData.lastName || formData.email || formData.phone;
-    
+
     if (hasData && !editingUser) {
       const confirmClose = window.confirm('Tem certeza? Dados não salvos serão perdidos.');
       if (!confirmClose) return;
     }
-    
+
     closeModal();
   };
 
@@ -215,7 +244,7 @@ const UsersPage = () => {
     }
 
     setFieldErrors(errors);
-    
+
     if (Object.keys(errors).length > 0) {
       setError('Por favor, corrija os erros antes de continuar');
       return false;
@@ -293,6 +322,22 @@ const UsersPage = () => {
     }
   };
 
+  const handlePermissionsChange = (permissionIds) => {
+    setSelectedPermissions(permissionIds);
+  };
+
+  const savePermissions = async (userId) => {
+    try {
+      await permissionService.updateUserPermissions(userId, selectedPermissions);
+      setSuccess('Permissões atualizadas com sucesso!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Erro ao salvar permissões:', error);
+      setError(error.response?.data?.error || 'Erro ao salvar permissões');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
   const getRoleBadge = (role) => {
     const badges = {
       ADMIN: { class: 'badge-danger', text: 'Administrador' },
@@ -318,7 +363,7 @@ const UsersPage = () => {
     <>
       <Header />
       <div className="container" style={{ marginTop: '2rem' }}>
-        
+
         <div className="flex-between" style={{ marginBottom: '2rem', alignItems: 'flex-start' }}>
           <div>
             <h1 className="font-bold text-2xl">Gerenciar Usuários</h1>
@@ -346,7 +391,7 @@ const UsersPage = () => {
 
         {users.length === 0 ? (
           <div className="card text-center" style={{ padding: '3rem' }}>
-            <Users size={48} style={{ color: 'var(--text-light)', margin: '0 auto 1rem' }} />
+            <UsersIcon size={48} style={{ color: 'var(--text-light)', margin: '0 auto 1rem' }} />
             <h3 className="font-bold text-lg" style={{ marginBottom: '0.5rem' }}>
               Nenhum usuário cadastrado
             </h3>
@@ -439,162 +484,231 @@ const UsersPage = () => {
 
         {/* Modal Criar/Editar */}
         {showModal && (
-          <div className="modal-overlay" onClick={closeModal}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onClick={handleModalClose}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
               <div className="card" style={{ margin: 0 }}>
                 <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
                   <h2 className="font-bold text-xl">
-                    {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
+                    {editingUser ? 'Editar Funcionário' : 'Novo Funcionário'}
                   </h2>
-                  <button onClick={closeModal} className="btn-icon">
+                  <button onClick={handleModalClose} className="btn-icon">
                     <X size={24} />
                   </button>
                 </div>
 
                 {error && <div className="alert alert-danger">{error}</div>}
+                {success && <div className="alert alert-success">{success}</div>}
 
-                <form onSubmit={handleSubmit}>
-                  <div className="grid grid-2">
-                    <div className="input-group">
-                      <label htmlFor="firstName">Nome *</label>
-                      <input
-                        type="text"
-                        id="firstName"
-                        name="firstName"
-                        value={formData.firstName}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="João"
-                      />
-                      {fieldErrors.firstName && (
-                        <span className="text-sm text-danger">{fieldErrors.firstName}</span>
-                      )}
-                    </div>
-
-                    <div className="input-group">
-                      <label htmlFor="lastName">Sobrenome *</label>
-                      <input
-                        type="text"
-                        id="lastName"
-                        name="lastName"
-                        value={formData.lastName}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="Silva"
-                      />
-                      {fieldErrors.lastName && (
-                        <span className="text-sm text-danger">{fieldErrors.lastName}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="input-group">
-                    <label htmlFor="email">Email *</label>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="usuario@email.com"
-                    />
-                    {fieldErrors.email && (
-                      <span className="text-sm text-danger">{fieldErrors.email}</span>
-                    )}
-                  </div>
-
-                  {!editingUser && (
-                    <div className="input-group">
-                      <label htmlFor="password">Senha *</label>
-                      <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        required={!editingUser}
-                        placeholder="••••••••"
-                      />
-                      <small className="text-sm text-muted">
-                        Mín. 8 caracteres, maiúsculas, minúsculas, números e especiais
-                      </small>
-                      {fieldErrors.password && (
-                        <span className="text-sm text-danger">{fieldErrors.password}</span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="grid grid-2">
-                    <div className="input-group">
-                      <label htmlFor="phone">Telefone *</label>
-                      <MaskedInput
-                        mask="phone"
-                        id="phone"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="(00) 00000-0000"
-                      />
-                      {fieldErrors.phone && (
-                        <span className="text-sm text-danger">{fieldErrors.phone}</span>
-                      )}
-                    </div>
-
-                    <div className="input-group">
-                      <label htmlFor="cpf">CPF (Opcional)</label>
-                      <MaskedInput
-                        mask="cpf"
-                        id="cpf"
-                        name="cpf"
-                        value={formData.cpf}
-                        onChange={handleInputChange}
-                        placeholder="000.000.000-00"
-                      />
-                      {fieldErrors.cpf && (
-                        <span className="text-sm text-danger">{fieldErrors.cpf}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="input-group">
-                    <label htmlFor="role">Função *</label>
-                    <select
-                      id="role"
-                      name="role"
-                      value={formData.role}
-                      onChange={handleInputChange}
-                      required
-                    >
-                      <option value="SEMI_ADMIN">Funcionário</option>
-                      <option value="ADMIN">Administrador</option>
-                    </select>
-                    <small className="text-sm text-muted">
-                      Administradores têm acesso total ao sistema
-                    </small>
-                  </div>
-
-                  <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
+                {/* NOVO: Tabs */}
+                {editingUser && formData.role === 'SEMI_ADMIN' && (
+                  <div style={{
+                    display: 'flex',
+                    gap: '1rem',
+                    marginBottom: '1.5rem',
+                    borderBottom: '2px solid #e5e7eb'
+                  }}>
                     <button
                       type="button"
-                      onClick={closeModal}
-                      className="btn btn-outline"
-                      style={{ flex: 1 }}
+                      onClick={() => setActiveTab('info')}
+                      style={{
+                        padding: '0.75rem 1.5rem',
+                        background: 'none',
+                        border: 'none',
+                        borderBottom: activeTab === 'info' ? '3px solid var(--primary-color)' : '3px solid transparent',
+                        color: activeTab === 'info' ? 'var(--primary-color)' : '#6b7280',
+                        fontWeight: activeTab === 'info' ? '600' : '400',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
                     >
-                      <X size={18} />
-                      Cancelar
+                      📋 Informações
                     </button>
                     <button
-                      type="submit"
-                      className="btn btn-primary"
-                      style={{ flex: 1 }}
+                      type="button"
+                      onClick={() => setActiveTab('permissions')}
+                      style={{
+                        padding: '0.75rem 1.5rem',
+                        background: 'none',
+                        border: 'none',
+                        borderBottom: activeTab === 'permissions' ? '3px solid var(--primary-color)' : '3px solid transparent',
+                        color: activeTab === 'permissions' ? 'var(--primary-color)' : '#6b7280',
+                        fontWeight: activeTab === 'permissions' ? '600' : '400',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
                     >
-                      <Check size={18} />
-                      {editingUser ? 'Atualizar' : 'Cadastrar'}
+                      <Shield size={18} />
+                      Permissões
                     </button>
                   </div>
-                </form>
+                )}
+
+                {/* Conteúdo das Tabs */}
+                {activeTab === 'info' ? (
+                  <form onSubmit={handleSubmit}>
+                    {/* INÍCIO: Conteúdo do Formulário Adicionado */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+                      <div className="input-group">
+                        <label htmlFor="firstName">Nome *</label>
+                        <input
+                          type="text"
+                          id="firstName"
+                          name="firstName"
+                          value={formData.firstName}
+                          onChange={handleInputChange}
+                          placeholder="Nome do funcionário"
+                          className={fieldErrors.firstName ? 'input-error' : ''}
+                        />
+                        {fieldErrors.firstName && <small className="error-message">{fieldErrors.firstName}</small>}
+                      </div>
+
+                      <div className="input-group">
+                        <label htmlFor="lastName">Sobrenome *</label>
+                        <input
+                          type="text"
+                          id="lastName"
+                          name="lastName"
+                          value={formData.lastName}
+                          onChange={handleInputChange}
+                          placeholder="Sobrenome do funcionário"
+                          className={fieldErrors.lastName ? 'input-error' : ''}
+                        />
+                        {fieldErrors.lastName && <small className="error-message">{fieldErrors.lastName}</small>}
+                      </div>
+
+                      <div className="input-group" style={{ gridColumn: 'span 2' }}>
+                        <label htmlFor="email">Email *</label>
+                        <input
+                          type="email"
+                          id="email"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          placeholder="email@exemplo.com"
+                          className={fieldErrors.email ? 'input-error' : ''}
+                        />
+                        {fieldErrors.email && <small className="error-message">{fieldErrors.email}</small>}
+                      </div>
+
+                      <div className="input-group">
+                        <label htmlFor="phone">Telefone *</label>
+                        <MaskedInput
+                          mask="(99) 99999-9999"
+                          id="phone"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          placeholder="(XX) XXXXX-XXXX"
+                          className={fieldErrors.phone ? 'input-error' : ''}
+                        />
+                        {fieldErrors.phone && <small className="error-message">{fieldErrors.phone}</small>}
+                      </div>
+
+                      <div className="input-group">
+                        <label htmlFor="cpf">CPF (Opcional)</label>
+                        <MaskedInput
+                          mask="999.999.999-99"
+                          id="cpf"
+                          name="cpf"
+                          value={formData.cpf}
+                          onChange={handleInputChange}
+                          placeholder="000.000.000-00"
+                          className={fieldErrors.cpf ? 'input-error' : ''}
+                        />
+                        {fieldErrors.cpf && <small className="error-message">{fieldErrors.cpf}</small>}
+                      </div>
+
+                      <div className="input-group" style={{ gridColumn: 'span 2' }}>
+                        <label htmlFor="role">Função *</label>
+                        <select
+                          id="role"
+                          name="role"
+                          value={formData.role}
+                          onChange={handleInputChange}
+                        >
+                          <option value="SEMI_ADMIN">Funcionário</option>
+                          <option value="ADMIN">Administrador</option>
+                        </select>
+                      </div>
+
+                      <div className="input-group" style={{ gridColumn: 'span 2' }}>
+                        <label htmlFor="password">
+                          {editingUser ? 'Nova Senha (Opcional)' : 'Senha *'}
+                        </label>
+                        <input
+                          type="password"
+                          id="password"
+                          name="password"
+                          value={formData.password}
+                          onChange={handleInputChange}
+                          placeholder={editingUser ? 'Deixe em branco para manter a senha' : '••••••••'}
+                          className={fieldErrors.password ? 'input-error' : ''}
+                        />
+                        {fieldErrors.password ? (
+                          <small className="error-message">{fieldErrors.password}</small>
+                        ) : (
+                          <small className="text-sm text-muted">
+                            Mín. 8 caracteres, com maiúsculas, minúsculas, números e símbolos.
+                          </small>
+                        )}
+                      </div>
+                    </div>
+                    {/* FIM: Conteúdo do Formulário Adicionado */}
+
+                    {/* Botões */}
+                    <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={closeModal}
+                        className="btn btn-outline"
+                        style={{ flex: 1 }}
+                      >
+                        <X size={18} />
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        style={{ flex: 1 }}
+                      >
+                        <Check size={18} />
+                        {editingUser ? 'Atualizar' : 'Cadastrar'}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div>
+                    {/* NOVO: Aba de Permissões */}
+                    <PermissionCheckboxes
+                      userId={editingUser?.id}
+                      onPermissionsChange={handlePermissionsChange}
+                    />
+
+                    <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={closeModal}
+                        className="btn btn-outline"
+                        style={{ flex: 1 }}
+                      >
+                        <X size={18} />
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => savePermissions(editingUser.id)}
+                        className="btn btn-primary"
+                        style={{ flex: 1 }}
+                      >
+                        <Shield size={18} />
+                        Salvar Permissões
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

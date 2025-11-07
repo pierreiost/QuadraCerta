@@ -1,19 +1,18 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // Dashboard - Visão Geral
-router.get('/overview', authMiddleware, async (req, res) => {
+router.get('/overview', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
-    // Total de quadras
     const totalCourts = await prisma.court.count({
       where: { complexId: req.user.complexId }
     });
 
-    // Quadras disponíveis
     const availableCourts = await prisma.court.count({
       where: {
         complexId: req.user.complexId,
@@ -21,7 +20,6 @@ router.get('/overview', authMiddleware, async (req, res) => {
       }
     });
 
-    // Quadras ocupadas
     const occupiedCourts = await prisma.court.count({
       where: {
         complexId: req.user.complexId,
@@ -29,12 +27,10 @@ router.get('/overview', authMiddleware, async (req, res) => {
       }
     });
 
-    // Total de clientes
     const totalClients = await prisma.client.count({
       where: { complexId: req.user.complexId }
     });
 
-    // Total de reservas (ativas)
     const totalReservations = await prisma.reservation.count({
       where: {
         court: { complexId: req.user.complexId },
@@ -43,7 +39,6 @@ router.get('/overview', authMiddleware, async (req, res) => {
       }
     });
 
-    // Comandas abertas
     const openTabs = await prisma.tab.count({
       where: {
         client: { complexId: req.user.complexId },
@@ -51,7 +46,6 @@ router.get('/overview', authMiddleware, async (req, res) => {
       }
     });
 
-    // Produtos com estoque baixo (menos de 10 unidades)
     const lowStockProducts = await prisma.product.count({
       where: {
         complexId: req.user.complexId,
@@ -77,7 +71,7 @@ router.get('/overview', authMiddleware, async (req, res) => {
 });
 
 // Próximos horários
-router.get('/upcoming', authMiddleware, async (req, res) => {
+router.get('/upcoming', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
     const now = new Date();
     const upcomingReservations = await prisma.reservation.findMany({
@@ -102,7 +96,7 @@ router.get('/upcoming', authMiddleware, async (req, res) => {
 });
 
 // Relatório de receitas
-router.get('/revenue', authMiddleware, async (req, res) => {
+router.get('/revenue', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
@@ -141,7 +135,7 @@ router.get('/revenue', authMiddleware, async (req, res) => {
 });
 
 // Relatório de ocupação
-router.get('/occupancy', authMiddleware, async (req, res) => {
+router.get('/occupancy', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 

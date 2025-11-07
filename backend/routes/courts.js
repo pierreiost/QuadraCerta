@@ -1,13 +1,14 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 const { courtValidators, validateId } = require('../validators/validators');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // Listar quadras do complexo
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('courts', 'view'), async (req, res) => {
   try {
     const courts = await prisma.court.findMany({
       where: { complexId: req.user.complexId },
@@ -21,8 +22,8 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Buscar quadra por ID (com validação de UUID)
-router.get('/:id', authMiddleware, validateId, async (req, res) => {
+// Buscar quadra por ID
+router.get('/:id', authMiddleware, checkPermission('courts', 'view'), validateId, async (req, res) => {
   try {
     const court = await prisma.court.findFirst({
       where: {
@@ -42,8 +43,8 @@ router.get('/:id', authMiddleware, validateId, async (req, res) => {
   }
 });
 
-// Criar nova quadra (com validação completa)
-router.post('/', authMiddleware, courtValidators.create, async (req, res) => {
+// Criar nova quadra
+router.post('/', authMiddleware, checkPermission('courts', 'create'), courtValidators.create, async (req, res) => {
   try {
     const { name, sportType, capacity, pricePerHour, description } = req.body;
 
@@ -72,12 +73,11 @@ router.post('/', authMiddleware, courtValidators.create, async (req, res) => {
   }
 });
 
-// Atualizar quadra (com validação)
-router.put('/:id', authMiddleware, courtValidators.update, async (req, res) => {
+// Atualizar quadra
+router.put('/:id', authMiddleware, checkPermission('courts', 'edit'), courtValidators.update, async (req, res) => {
   try {
     const { name, sportType, capacity, pricePerHour, description, status } = req.body;
 
-    // Verificar se quadra existe e pertence ao complexo
     const court = await prisma.court.findFirst({
       where: {
         id: req.params.id,
@@ -89,7 +89,6 @@ router.put('/:id', authMiddleware, courtValidators.update, async (req, res) => {
       return res.status(404).json({ error: 'Quadra não encontrada' });
     }
 
-    // Atualizar apenas campos fornecidos
     const updatedCourt = await prisma.court.update({
       where: { id: req.params.id },
       data: {
@@ -109,10 +108,9 @@ router.put('/:id', authMiddleware, courtValidators.update, async (req, res) => {
   }
 });
 
-// Deletar quadra (com validação)
-router.delete('/:id', authMiddleware, validateId, async (req, res) => {
+// Deletar quadra
+router.delete('/:id', authMiddleware, checkPermission('courts', 'delete'), validateId, async (req, res) => {
   try {
-    // Verificar se quadra existe e pertence ao complexo
     const court = await prisma.court.findFirst({
       where: {
         id: req.params.id,
@@ -132,7 +130,6 @@ router.delete('/:id', authMiddleware, validateId, async (req, res) => {
       return res.status(404).json({ error: 'Quadra não encontrada' });
     }
 
-    // Verificar se há reservas futuras
     if (court.reservations.length > 0) {
       return res.status(409).json({ 
         error: 'Não é possível deletar quadra com reservas futuras ativas',

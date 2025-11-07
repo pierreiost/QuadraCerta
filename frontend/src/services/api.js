@@ -9,7 +9,6 @@ const api = axios.create({
   },
 });
 
-// Interceptor para adicionar token de autenticação
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -23,7 +22,6 @@ api.interceptors.request.use(
   }
 );
 
-// Interceptor para tratar erros de autenticação
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -36,14 +34,12 @@ api.interceptors.response.use(
   }
 );
 
-// Serviços de Autenticação
 export const authService = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   register: (userData) => api.post('/auth/register', userData),
   getMe: () => api.get('/auth/me'),
 };
 
-// Serviços de Quadras
 export const courtService = {
   getAll: () => api.get('/courts'),
   getById: (id) => api.get(`/courts/${id}`),
@@ -52,7 +48,6 @@ export const courtService = {
   delete: (id) => api.delete(`/courts/${id}`),
 };
 
-// Serviços de Clientes
 export const clientService = {
   getAll: () => api.get('/clients'),
   getById: (id) => api.get(`/clients/${id}`),
@@ -61,7 +56,6 @@ export const clientService = {
   delete: (id) => api.delete(`/clients/${id}`),
 };
 
-// Serviços de Reservas
 export const reservationService = {
   getAll: (params) => api.get('/reservations', { params }),
   getById: (id) => api.get(`/reservations/${id}`),
@@ -70,7 +64,6 @@ export const reservationService = {
   cancel: (id) => api.delete(`/reservations/${id}`),
 };
 
-// Serviços de Produtos
 export const productService = {
   getAll: () => api.get('/products'),
   getById: (id) => api.get(`/products/${id}`),
@@ -83,7 +76,6 @@ export const productService = {
     api.post(`/products/${id}/stock/remove`, { quantity, reason }),
 };
 
-// Serviços de Comandas
 export const tabService = {
   getAll: (params) => api.get('/tabs', { params }),
   getById: (id) => api.get(`/tabs/${id}`),
@@ -94,7 +86,6 @@ export const tabService = {
   cancel: (id) => api.delete(`/tabs/${id}`),
 };
 
-// Serviços de Dashboard
 export const dashboardService = {
   getOverview: () => api.get('/dashboard/overview'),
   getUpcoming: () => api.get('/dashboard/upcoming'),
@@ -110,6 +101,21 @@ export const userService = {
   delete: (id) => api.delete(`/users/${id}`),
   resetPassword: (id, newPassword) =>
     api.put(`/users/${id}/reset-password`, { newPassword }),
+};
+
+export const notificationService = {
+  getAll: () => api.get('/notifications'),
+  getSummary: () => api.get('/notifications/summary'),
+};
+
+// Serviços de Permissões
+export const permissionService = {
+  getAll: () => api.get('/permissions'),
+  getUserPermissions: (userId) => api.get(`/permissions/user/${userId}`),
+  updateUserPermissions: (userId, permissionIds) => 
+    api.put(`/permissions/user/${userId}`, { permissionIds }),
+  check: (module, action) => 
+    api.post('/permissions/check', { module, action }),
 };
 
 export default api;

@@ -1,5 +1,3 @@
-// frontend/src/App.js
-
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -12,9 +10,10 @@ import Reservations from './pages/Reservations';
 import Products from './pages/Products';
 import Tabs from './pages/Tabs';
 import TabDetails from './pages/TabDetails';
-import Profile from './pages/Profile'; // Importa a página de Perfil
-import './styles/App.css';
+import Profile from './pages/Profile';
 import Users from './pages/Users';
+import Notifications from './pages/Notifications';
+import './styles/App.css';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -145,13 +144,19 @@ function App() {
               </PrivateRoute>
             }
           />
-
-          {/* Rota de perfil que adicionamos */}
           <Route
             path="/profile"
             element={
               <PrivateRoute>
                 <Profile />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <PrivateRoute>
+                <Notifications />
               </PrivateRoute>
             }
           />

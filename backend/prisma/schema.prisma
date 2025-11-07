@@ -7,7 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Modelo de Usuários
 model User {
   id            String   @id @default(uuid())
   firstName     String
@@ -23,10 +22,37 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
+  permissions   UserPermission[]
+  
   @@map("users")
 }
 
-// Modelo de Complexo Esportivo
+model Permission {
+  id          String   @id @default(uuid())
+  module      String
+  action      String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  
+  users       UserPermission[]
+  
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model UserPermission {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  
+  @@unique([userId, permissionId])
+  @@map("user_permissions")
+}
+
 model Complex {
   id          String   @id @default(uuid())
   name        String   @unique
@@ -42,7 +68,6 @@ model Complex {
   @@map("complexes")
 }
 
-// Modelo de Quadras
 model Court {
   id          String       @id @default(uuid())
   name        String
@@ -61,7 +86,6 @@ model Court {
   @@map("courts")
 }
 
-// Modelo de Clientes
 model Client {
   id          String   @id @default(uuid())
   fullName    String
@@ -79,7 +103,6 @@ model Client {
   @@map("clients")
 }
 
-// Modelo de Reservas
 model Reservation {
   id              String            @id @default(uuid())
   courtId         String
@@ -100,11 +123,10 @@ model Reservation {
   @@map("reservations")
 }
 
-// Modelo de Grupo de Recorrência
 model RecurringGroup {
   id            String   @id @default(uuid())
-  frequency     String   // WEEKLY, MONTHLY
-  dayOfWeek     Int?     // 0-6 (domingo a sábado)
+  frequency     String
+  dayOfWeek     Int?
   startDate     DateTime
   endDate       DateTime?
   createdAt     DateTime @default(now())
@@ -115,14 +137,13 @@ model RecurringGroup {
   @@map("recurring_groups")
 }
 
-// Modelo de Produtos
 model Product {
   id          String   @id @default(uuid())
   name        String
   description String?
   price       Float
   stock       Int      @default(0)
-  unit        String   // UNIDADE, LITRO, KG
+  unit        String
   expiryDate  DateTime?
   complexId   String
   complex     Complex  @relation(fields: [complexId], references: [id])
@@ -135,12 +156,11 @@ model Product {
   @@map("products")
 }
 
-// Modelo de Movimentação de Estoque
 model StockMovement {
   id          String   @id @default(uuid())
   productId   String
   product     Product  @relation(fields: [productId], references: [id])
-  type        String   // ENTRADA, SAIDA
+  type        String
   quantity    Int
   reason      String?
   createdAt   DateTime @default(now())
@@ -148,7 +168,6 @@ model StockMovement {
   @@map("stock_movements")
 }
 
-// Modelo de Comandas
 model Tab {
   id            String      @id @default(uuid())
   clientId      String
@@ -166,7 +185,6 @@ model Tab {
   @@map("tabs")
 }
 
-// Modelo de Itens da Comanda
 model TabItem {
   id          String   @id @default(uuid())
   tabId       String
@@ -182,7 +200,6 @@ model TabItem {
   @@map("tab_items")
 }
 
-// Enums
 enum Role {
   SUPER_ADMIN
   ADMIN

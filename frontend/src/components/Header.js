@@ -1,11 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, User, Menu, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { LogOut, User, Menu, X, Bell } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import NotificationBadge from './NotificationBadge';
+import { notificationService } from '../services/api';
 
 const Header = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    loadNotificationCount();
+    const interval = setInterval(loadNotificationCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNotificationCount = async () => {
+    try {
+      const response = await notificationService.getSummary();
+      setNotificationCount(response.data.count);
+    } catch (error) {
+      console.error('Erro ao carregar contador de notificações:', error);
+    }
+  };
 
   return (
     <header style={{
@@ -54,6 +73,10 @@ const Header = () => {
                   maxHeight: '100%',
                   objectFit: 'contain'
                 }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.parentElement.innerHTML = '<span style="font-size: 1.5rem; font-weight: 700; color: var(--primary-color)">QC</span>';
+                }}
               />
             </div>
           </Link>
@@ -81,6 +104,35 @@ const Header = () => {
               gap: '1.5rem'
             }}
           >
+            <button
+              onClick={() => navigate('/notifications')}
+              style={{
+                position: 'relative',
+                background: 'white',
+                border: '2px solid #e5e7eb',
+                borderRadius: '12px',
+                padding: '0.75rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f9fafb';
+                e.currentTarget.style.borderColor = 'var(--primary-color)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'white';
+                e.currentTarget.style.borderColor = '#e5e7eb';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              <Bell size={20} color="#6b7280" />
+              <NotificationBadge count={notificationCount} />
+            </button>
+
             <Link
               to="/profile"
               style={{
@@ -122,19 +174,24 @@ const Header = () => {
                     {user?.role}
                   </p>
                 </div>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  background: 'linear-gradient(135deg, var(--primary-color) 0%, #667eea 100%)',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                  transition: 'all 0.3s ease'
-                }}>
-                  <User size={24} />
+
+                <div
+                  className="user-avatar"
+                  style={{
+                    width: '45px',
+                    height: '45px',
+                    background: 'linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontWeight: '600',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  <User size={20} />
                 </div>
               </div>
             </Link>
@@ -145,30 +202,25 @@ const Header = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                padding: '0.625rem 1.25rem',
+                padding: '0.75rem 1.25rem',
                 background: 'white',
                 border: '2px solid #e5e7eb',
-                borderRadius: '10px',
+                borderRadius: '12px',
                 color: '#374151',
                 fontSize: '0.875rem',
                 fontWeight: '500',
                 cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = '#fee2e2';
-                e.currentTarget.style.borderColor = '#fca5a5';
+                e.currentTarget.style.borderColor = '#fecaca';
                 e.currentTarget.style.color = '#dc2626';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'white';
                 e.currentTarget.style.borderColor = '#e5e7eb';
                 e.currentTarget.style.color = '#374151';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
               }}
             >
               <LogOut size={18} />
@@ -186,29 +238,66 @@ const Header = () => {
               gap: '1rem',
               paddingBottom: '1rem',
               borderTop: '1px solid #e5e7eb',
-              paddingTop: '1rem',
-              marginTop: '1rem'
+              paddingTop: '1rem'
             }}
           >
-            <Link
-              to="/profile"
+            <button
+              onClick={() => {
+                navigate('/notifications');
+                setMobileMenuOpen(false);
+              }}
               style={{
-                textDecoration: 'none',
-                color: 'inherit',
-                padding: '0.75rem',
-                background: 'white',
-                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '1rem',
-                border: '1px solid #e5e7eb'
+                justifyContent: 'space-between',
+                padding: '0.75rem',
+                background: 'white',
+                border: '2px solid #e5e7eb',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                width: '100%',
+                position: 'relative'
               }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Bell size={20} color="#6b7280" />
+                <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>
+                  Notificações
+                </span>
+              </div>
+              {notificationCount > 0 && (
+                <span style={{
+                  background: '#ef4444',
+                  color: 'white',
+                  borderRadius: '12px',
+                  padding: '0.25rem 0.5rem',
+                  fontSize: '0.75rem',
+                  fontWeight: '700'
+                }}>
+                  {notificationCount}
+                </span>
+              )}
+            </button>
+
+            <Link
+              to="/profile"
               onClick={() => setMobileMenuOpen(false)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem',
+                background: 'white',
+                border: '2px solid #e5e7eb',
+                borderRadius: '10px',
+                textDecoration: 'none',
+                color: 'inherit'
+              }}
             >
               <div style={{
                 width: '40px',
                 height: '40px',
-                background: 'linear-gradient(135deg, var(--primary-color) 0%, #667eea 100%)',
+                background: 'linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -255,7 +344,17 @@ const Header = () => {
         )}
       </div>
 
-      <style jsx>{`
+      <style>{`
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.7;
+            transform: scale(1.05);
+          }
+        }
+
         @media (max-width: 768px) {
           .mobile-menu-toggle {
             display: block !important;
