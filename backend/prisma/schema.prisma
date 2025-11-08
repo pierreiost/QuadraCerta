@@ -21,7 +21,7 @@ model User {
   complex       Complex? @relation(fields: [complexId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  
+  status        UserStatus  @default(PENDING) 
   permissions   UserPermission[]
   
   @@map("users")
@@ -222,4 +222,11 @@ enum TabStatus {
   OPEN
   PAID
   CANCELLED
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  SUSPENDED
 }

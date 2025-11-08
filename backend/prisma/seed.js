@@ -224,6 +224,19 @@ async function main() {
     }
   });
 
+  const superAdmin = await prisma.user.create({
+    data: {
+      firstName: 'Quadra',
+      lastName: 'Certa',
+      email: 'quadracerta@gmail.com',
+      password: await bcrypt.hash('Quadracerta1811@', 10),
+      phone: '(53) 98125-9200',
+      role: 'SUPER_ADMIN',
+      status: 'ACTIVE',
+      complexId: null 
+    }
+  });
+
   await prisma.tabItem.create({
     data: {
       tabId: tab.id,

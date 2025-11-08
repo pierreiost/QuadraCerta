@@ -17,6 +17,7 @@ const tabRoutes = require('./routes/tabs');
 const dashboardRoutes = require('./routes/dashboard');
 const notificationRoutes = require('./routes/notifications');
 const permissionRoutes = require('./routes/permissions');
+const adminRoutes = require('./routes/admin');
 const app = express();
 const prisma = new PrismaClient();
 
@@ -107,6 +108,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/permissions', permissionRoutes);
+app.use('/api/admin', adminRoutes);
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 

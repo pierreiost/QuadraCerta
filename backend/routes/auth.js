@@ -9,24 +9,19 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// ============================================
-// RATE LIMITER - Definido aqui no próprio arquivo
-// ============================================
+// ✅ CORRIGIDO - Rate limiter compatível com IPv6
 const loginFailureLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // 5 tentativas de login com FALHA
-  skipSuccessfulRequests: true, // ← Ignora logins bem-sucedidos
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
   message: {
     error: 'Muitas tentativas de login incorretas. Tente novamente em 15 minutos.'
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.ip;
-  }
+  legacyHeaders: false
+  // ❌ REMOVIDO keyGenerator - usa o padrão que já trata IPv6
 });
 
-// Validações
 const registerValidation = [
   body('firstName')
     .trim()
@@ -79,7 +74,7 @@ const loginValidation = [
     .notEmpty().withMessage('Senha é obrigatória')
 ];
 
-// Registro de novo complexo (SEM rate limit)
+// Registro de novo complexo
 router.post('/register', registerValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -128,6 +123,7 @@ router.post('/register', registerValidation, async (req, res) => {
           cpf,
           cnpj,
           role: 'ADMIN',
+          status: 'PENDING',
           complexId: complex.id
         },
         select: {
@@ -136,6 +132,7 @@ router.post('/register', registerValidation, async (req, res) => {
           lastName: true,
           email: true,
           role: true,
+          status: true,
           phone: true,
           cpf: true,
           cnpj: true,
@@ -152,20 +149,16 @@ router.post('/register', registerValidation, async (req, res) => {
       return { user, complex };
     });
 
-    const token = jwt.sign(
-      { 
-        userId: result.user.id,
-        complexId: result.complex.id,
-        role: result.user.role
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
     res.status(201).json({
-      message: 'Cadastro realizado com sucesso',
-      token,
-      user: result.user
+      message: 'Cadastro realizado com sucesso! Sua conta está aguardando aprovação. Você receberá um email quando for aprovada.',
+      user: {
+        id: result.user.id,
+        firstName: result.user.firstName,
+        lastName: result.user.lastName,
+        email: result.user.email,
+        status: result.user.status,
+        complex: result.user.complex
+      }
     });
 
   } catch (error) {
@@ -174,9 +167,7 @@ router.post('/register', registerValidation, async (req, res) => {
   }
 });
 
-// ============================================
-// LOGIN - COM RATE LIMITING APENAS EM FALHAS
-// ============================================
+// Login
 router.post('/login', loginFailureLimiter, loginValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -203,19 +194,43 @@ router.post('/login', loginFailureLimiter, loginValidation, async (req, res) => 
     });
 
     if (!user) {
-      // ⚠️ Retorna 401 - rate limiter conta esta tentativa
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      // ⚠️ Retorna 401 - rate limiter conta esta tentativa
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    // ✅ Login bem-sucedido - NÃO conta para o rate limit
-    // devido ao skipSuccessfulRequests: true
+    // Verificar status do usuário
+    if (user.status === 'PENDING') {
+      return res.status(403).json({ 
+        error: 'Sua conta está aguardando aprovação. Você receberá um email quando for aprovada.',
+        status: 'PENDING'
+      });
+    }
+
+    if (user.status === 'REJECTED') {
+      return res.status(403).json({ 
+        error: 'Sua conta foi rejeitada. Entre em contato com o suporte para mais informações.',
+        status: 'REJECTED'
+      });
+    }
+
+    if (user.status === 'SUSPENDED') {
+      return res.status(403).json({ 
+        error: 'Sua conta está suspensa. Entre em contato com o suporte.',
+        status: 'SUSPENDED'
+      });
+    }
+
+    // SUPER_ADMIN não tem complexId
+    if (user.role !== 'SUPER_ADMIN' && !user.complexId) {
+      return res.status(403).json({ 
+        error: 'Erro na configuração da conta. Entre em contato com o suporte.' 
+      });
+    }
     
     const token = jwt.sign(
       { 
@@ -241,7 +256,7 @@ router.post('/login', loginFailureLimiter, loginValidation, async (req, res) => 
   }
 });
 
-// Obter dados do usuário logado (SEM rate limit)
+// Obter dados do usuário logado
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
@@ -252,6 +267,7 @@ router.get('/me', authMiddleware, async (req, res) => {
         lastName: true,
         email: true,
         role: true,
+        status: true,
         phone: true,
         cpf: true,
         cnpj: true,
@@ -278,7 +294,7 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Atualizar senha (SEM rate limit - usuário já está autenticado)
+// Atualizar senha
 router.put('/change-password', 
   authMiddleware,
   [
