@@ -21,6 +21,8 @@ const Login = () => {
     });
   };
 
+  // Em Login.js, atualize a função handleSubmit:
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -29,7 +31,12 @@ const Login = () => {
     const result = await login(formData.email, formData.password);
 
     if (result.success) {
-      navigate('/dashboard');
+      // Redirecionar baseado no role
+      if (result.role === 'SUPER_ADMIN') {
+        navigate('/super-admin');
+      } else {
+        navigate('/dashboard');
+      }
     } else {
       setError(result.error);
     }

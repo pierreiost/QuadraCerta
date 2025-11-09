@@ -38,7 +38,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(user));
       setUser(user);
       
-      return { success: true };
+      return { 
+        success: true,
+        role: user.role // Retorna o role para redirecionar corretamente
+      };
     } catch (error) {
       return {
         success: false,

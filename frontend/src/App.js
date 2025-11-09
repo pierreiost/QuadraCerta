@@ -13,21 +13,9 @@ import TabDetails from './pages/TabDetails';
 import Profile from './pages/Profile';
 import Users from './pages/Users';
 import Notifications from './pages/Notifications';
+import SuperAdminPanel from './pages/SuperAdminPanel';
+import { SuperAdminRoute, SystemRoute } from './components/RoleRoute';
 import './styles/App.css';
-
-const PrivateRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="flex-center" style={{ minHeight: '100vh' }}>
-        <div className="loading" style={{ width: '50px', height: '50px', borderWidth: '5px' }}></div>
-      </div>
-    );
-  }
-
-  return user ? children : <Navigate to="/login" />;
-};
 
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -40,7 +28,36 @@ const PublicRoute = ({ children }) => {
     );
   }
 
-  return !user ? children : <Navigate to="/dashboard" />;
+  if (user) {
+    if (user.role === 'SUPER_ADMIN') {
+      return <Navigate to="/super-admin" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+};
+
+const RedirectByRole = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex-center" style={{ minHeight: '100vh' }}>
+        <div className="loading" style={{ width: '50px', height: '50px', borderWidth: '5px' }}></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role === 'SUPER_ADMIN') {
+    return <Navigate to="/super-admin" replace />;
+  }
+
+  return <Navigate to="/dashboard" replace />;
 };
 
 function App() {
@@ -48,6 +65,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Rotas Públicas */}
           <Route
             path="/login"
             element={
@@ -64,105 +82,118 @@ function App() {
               </PublicRoute>
             }
           />
+
+          {/* Rotas do Sistema (ADMIN e SEMI_ADMIN apenas) */}
           <Route
             path="/dashboard"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Dashboard />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/users"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Users />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/courts"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Courts />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/courts/:id"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Courts />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/clients"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Clients />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/reservations"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Reservations />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/agenda"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Reservations />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/products"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Products />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/tabs"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Tabs />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/tabs/:id"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <TabDetails />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/profile"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Profile />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
           <Route
             path="/notifications"
             element={
-              <PrivateRoute>
+              <SystemRoute>
                 <Notifications />
-              </PrivateRoute>
+              </SystemRoute>
             }
           />
 
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-          <Route path="*" element={<Navigate to="/dashboard" />} />
+          {/* Rota do Super Admin (apenas SUPER_ADMIN) */}
+          <Route
+            path="/super-admin"
+            element={
+              <SuperAdminRoute>
+                <SuperAdminPanel />
+              </SuperAdminRoute>
+            }
+          />
+
+          {/* Rotas de Redirecionamento */}
+          <Route path="/" element={<RedirectByRole />} />
+          <Route path="*" element={<RedirectByRole />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

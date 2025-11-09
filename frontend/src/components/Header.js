@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, User, Menu, X, Bell } from 'lucide-react';
+import { Shield, LogOut, User, Menu, X, Bell } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import NotificationBadge from './NotificationBadge';
 import { notificationService } from '../services/api';
@@ -41,8 +41,9 @@ const Header = () => {
           padding: '1rem 0',
           position: 'relative'
         }}>
+          {/* LOGO - sempre visível, redireciona baseado no role */}
           <Link
-            to="/dashboard"
+            to={user?.role === 'SUPER_ADMIN' ? '/super-admin' : '/dashboard'}
             style={{
               textDecoration: 'none',
               color: 'inherit',
@@ -96,6 +97,7 @@ const Header = () => {
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
 
+          {/* AÇÕES DO HEADER */}
           <div
             className="header-actions"
             style={{
@@ -104,37 +106,75 @@ const Header = () => {
               gap: '1.5rem'
             }}
           >
-            <button
-              onClick={() => navigate('/notifications')}
-              style={{
-                position: 'relative',
-                background: 'white',
-                border: '2px solid #e5e7eb',
-                borderRadius: '12px',
-                padding: '0.75rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f9fafb';
-                e.currentTarget.style.borderColor = 'var(--primary-color)';
-                e.currentTarget.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'white';
-                e.currentTarget.style.borderColor = '#e5e7eb';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <Bell size={20} color="#6b7280" />
-              <NotificationBadge count={notificationCount} />
-            </button>
+            {/* Notificações - só mostra se NÃO for SUPER_ADMIN */}
+            {user?.role !== 'SUPER_ADMIN' && (
+              <button
+                onClick={() => navigate('/notifications')}
+                style={{
+                  position: 'relative',
+                  background: 'white',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '12px',
+                  padding: '0.75rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f9fafb';
+                  e.currentTarget.style.borderColor = 'var(--primary-color)';
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'white';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                <Bell size={20} color="#6b7280" />
+                <NotificationBadge count={notificationCount} />
+              </button>
+            )}
 
+            {/* Botão Super Admin - só mostra para SUPER_ADMIN */}
+            {user?.role === 'SUPER_ADMIN' && (
+              <Link
+                to="/super-admin"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem 1.25rem',
+                  background: 'white',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '12px',
+                  color: '#374151',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#fef2f2';
+                  e.currentTarget.style.borderColor = '#dc2626';
+                  e.currentTarget.style.color = '#dc2626';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'white';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.color = '#374151';
+                }}
+              >
+                <Shield size={18} />
+                Super Admin
+              </Link>
+            )}
+
+            {/* Link do perfil - redireciona baseado no role */}
             <Link
-              to="/profile"
+              to={user?.role === 'SUPER_ADMIN' ? '/super-admin' : '/profile'}
               style={{
                 textDecoration: 'none',
                 color: 'inherit',
@@ -171,7 +211,7 @@ const Header = () => {
                     color: '#6b7280',
                     textTransform: 'capitalize'
                   }}>
-                    {user?.role}
+                    {user?.role === 'SUPER_ADMIN' ? 'Super Admin' : user?.role}
                   </p>
                 </div>
 
@@ -196,6 +236,7 @@ const Header = () => {
               </div>
             </Link>
 
+            {/* Botão Sair */}
             <button
               onClick={logout}
               style={{
@@ -229,6 +270,7 @@ const Header = () => {
           </div>
         </div>
 
+        {/* MENU MOBILE */}
         {mobileMenuOpen && (
           <div
             className="mobile-menu"
@@ -241,46 +283,74 @@ const Header = () => {
               paddingTop: '1rem'
             }}
           >
-            <button
-              onClick={() => {
-                navigate('/notifications');
-                setMobileMenuOpen(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem',
-                background: 'white',
-                border: '2px solid #e5e7eb',
-                borderRadius: '10px',
-                cursor: 'pointer',
-                width: '100%',
-                position: 'relative'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Bell size={20} color="#6b7280" />
-                <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>
-                  Notificações
-                </span>
-              </div>
-              {notificationCount > 0 && (
-                <span style={{
-                  background: '#ef4444',
-                  color: 'white',
-                  borderRadius: '12px',
-                  padding: '0.25rem 0.5rem',
-                  fontSize: '0.75rem',
-                  fontWeight: '700'
-                }}>
-                  {notificationCount}
-                </span>
-              )}
-            </button>
+            {/* Notificações mobile - só mostra se NÃO for SUPER_ADMIN */}
+            {user?.role !== 'SUPER_ADMIN' && (
+              <button
+                onClick={() => {
+                  navigate('/notifications');
+                  setMobileMenuOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.75rem',
+                  background: 'white',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  width: '100%',
+                  position: 'relative'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Bell size={20} color="#6b7280" />
+                  <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>
+                    Notificações
+                  </span>
+                </div>
+                {notificationCount > 0 && (
+                  <span style={{
+                    background: '#ef4444',
+                    color: 'white',
+                    borderRadius: '12px',
+                    padding: '0.25rem 0.5rem',
+                    fontSize: '0.75rem',
+                    fontWeight: '700'
+                  }}>
+                    {notificationCount}
+                  </span>
+                )}
+              </button>
+            )}
 
+            {/* Botão Super Admin mobile - só mostra para SUPER_ADMIN */}
+            {user?.role === 'SUPER_ADMIN' && (
+              <Link
+                to="/super-admin"
+                onClick={() => setMobileMenuOpen(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.75rem',
+                  background: 'white',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '10px',
+                  textDecoration: 'none',
+                  color: '#374151',
+                  fontSize: '0.875rem',
+                  fontWeight: '500'
+                }}
+              >
+                <Shield size={18} />
+                Super Admin
+              </Link>
+            )}
+
+            {/* Perfil mobile - redireciona baseado no role */}
             <Link
-              to="/profile"
+              to={user?.role === 'SUPER_ADMIN' ? '/super-admin' : '/profile'}
               onClick={() => setMobileMenuOpen(false)}
               style={{
                 display: 'flex',
@@ -311,7 +381,7 @@ const Header = () => {
                   {user?.firstName} {user?.lastName}
                 </p>
                 <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                  {user?.role}
+                  {user?.role === 'SUPER_ADMIN' ? 'Super Admin' : user?.role}
                 </p>
               </div>
             </Link>

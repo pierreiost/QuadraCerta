@@ -1,9 +1,7 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: 'http://localhost:5000/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -34,12 +32,16 @@ api.interceptors.response.use(
   }
 );
 
+// Serviços de Autenticação
 export const authService = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
-  register: (userData) => api.post('/auth/register', userData),
+  register: (data) => api.post('/auth/register', data),
+  login: (email, password) => api.post('/auth/login', { email, password }), // ✅ CORRIGIDO
   getMe: () => api.get('/auth/me'),
+  updateProfile: (data) => api.put('/auth/profile', data),
+  changePassword: (data) => api.put('/auth/change-password', data),
 };
 
+// Serviços de Quadras
 export const courtService = {
   getAll: () => api.get('/courts'),
   getById: (id) => api.get(`/courts/${id}`),
@@ -48,6 +50,7 @@ export const courtService = {
   delete: (id) => api.delete(`/courts/${id}`),
 };
 
+// Serviços de Clientes
 export const clientService = {
   getAll: () => api.get('/clients'),
   getById: (id) => api.get(`/clients/${id}`),
@@ -56,14 +59,17 @@ export const clientService = {
   delete: (id) => api.delete(`/clients/${id}`),
 };
 
+// Serviços de Reservas
 export const reservationService = {
   getAll: (params) => api.get('/reservations', { params }),
   getById: (id) => api.get(`/reservations/${id}`),
   create: (data) => api.post('/reservations', data),
   update: (id, data) => api.put(`/reservations/${id}`, data),
   cancel: (id) => api.delete(`/reservations/${id}`),
+  cancelRecurringGroup: (groupId) => api.delete(`/reservations/recurring-group/${groupId}`),
 };
 
+// Serviços de Produtos
 export const productService = {
   getAll: () => api.get('/products'),
   getById: (id) => api.get(`/products/${id}`),
@@ -76,6 +82,7 @@ export const productService = {
     api.post(`/products/${id}/stock/remove`, { quantity, reason }),
 };
 
+// Serviços de Comandas
 export const tabService = {
   getAll: (params) => api.get('/tabs', { params }),
   getById: (id) => api.get(`/tabs/${id}`),
@@ -86,6 +93,7 @@ export const tabService = {
   cancel: (id) => api.delete(`/tabs/${id}`),
 };
 
+// Serviços de Dashboard
 export const dashboardService = {
   getOverview: () => api.get('/dashboard/overview'),
   getUpcoming: () => api.get('/dashboard/upcoming'),
@@ -93,6 +101,7 @@ export const dashboardService = {
   getOccupancy: (params) => api.get('/dashboard/occupancy', { params }),
 };
 
+// Serviços de Usuários
 export const userService = {
   getAll: () => api.get('/users'),
   getById: (id) => api.get(`/users/${id}`),
@@ -103,11 +112,6 @@ export const userService = {
     api.put(`/users/${id}/reset-password`, { newPassword }),
 };
 
-export const notificationService = {
-  getAll: () => api.get('/notifications'),
-  getSummary: () => api.get('/notifications/summary'),
-};
-
 // Serviços de Permissões
 export const permissionService = {
   getAll: () => api.get('/permissions'),
@@ -116,6 +120,12 @@ export const permissionService = {
     api.put(`/permissions/user/${userId}`, { permissionIds }),
   check: (module, action) => 
     api.post('/permissions/check', { module, action }),
+};
+
+// Serviços de Notificações
+export const notificationService = {
+  getAll: () => api.get('/notifications'),
+  getSummary: () => api.get('/notifications/summary'),
 };
 
 export default api;
