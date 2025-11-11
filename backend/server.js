@@ -37,6 +37,7 @@ app.use(helmet({
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
+  'https://quadra-certa.vercel.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
