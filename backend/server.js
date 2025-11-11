@@ -20,6 +20,7 @@ const permissionRoutes = require('./routes/permissions');
 const adminRoutes = require('./routes/admin');
 const app = express();
 const prisma = new PrismaClient();
+const courtTypesRoutes = require('./routes/courtTypes');
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -116,6 +117,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+app.use('/api/court-types', courtTypesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Rota não encontrada' });

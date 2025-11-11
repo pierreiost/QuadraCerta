@@ -1,27 +1,37 @@
-// frontend/src/pages/Tabs.js
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../components/Header';
-import { tabService, clientService, reservationService } from '../services/api';
-import { Receipt, PlusCircle, Eye, X, DollarSign, Clock, User, RefreshCw } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { 
+  PlusCircle, 
+  Receipt, 
+  DollarSign, 
+  Clock, 
+  User,
+  RefreshCw,
+  Users,
+  Calendar,
+  Info,
+  X
+} from 'lucide-react';
+import Header from '../components/Header';
+import api from '../services/api';
 
 const Tabs = () => {
-  const navigate = useNavigate();
   const [tabs, setTabs] = useState([]);
   const [clients, setClients] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [filterStatus, setFilterStatus] = useState('OPEN'); // ✅ Padrão: OPEN
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [filterStatus, setFilterStatus] = useState('OPEN');
   const [formData, setFormData] = useState({
     clientId: '',
     reservationId: ''
   });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadData();
@@ -30,53 +40,54 @@ const Tabs = () => {
   const loadData = async () => {
     try {
       const [tabsRes, clientsRes, reservationsRes] = await Promise.all([
-        tabService.getAll(),
-        clientService.getAll(),
-        reservationService.getAll()
+        api.get('/tabs'),
+        api.get('/clients'),
+        api.get('/reservations')
       ]);
 
       setTabs(tabsRes.data);
       setClients(clientsRes.data);
       setReservations(reservationsRes.data);
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+    } catch (err) {
       setError('Erro ao carregar dados');
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
   const openModal = () => {
-    setFormData({
-      clientId: '',
-      reservationId: ''
-    });
     setShowModal(true);
     setError('');
+    setFormData({ clientId: '', reservationId: '' });
   };
 
   const closeModal = () => {
     setShowModal(false);
-    setFormData({
-      clientId: '',
-      reservationId: ''
-    });
     setError('');
+    setFormData({ clientId: '', reservationId: '' });
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
+    if (!formData.clientId) {
+      setError('Selecione um cliente');
+      return;
+    }
+
     try {
-      const response = await tabService.create(formData);
+      const response = await api.post('/tabs', {
+        clientId: formData.clientId,
+        reservationId: formData.reservationId || null
+      });
+
       setSuccess('Comanda criada com sucesso!');
       closeModal();
       loadData();
@@ -96,7 +107,6 @@ const Tabs = () => {
     return badges[status] || badges.OPEN;
   };
 
-  // ✅ FILTRO APLICADO - Filtra por status
   const filteredTabs = tabs.filter(tab => {
     if (filterStatus && filterStatus !== 'ALL' && tab.status !== filterStatus) {
       return false;
@@ -104,6 +114,18 @@ const Tabs = () => {
     return true;
   });
 
+  const getReservationsForToday = () => {
+    const today = startOfDay(new Date());
+    
+    return reservations.filter(r => {
+      if (r.status !== 'CONFIRMED') return false;
+      
+      const reservationDate = startOfDay(new Date(r.startTime));
+      return reservationDate.getTime() === today.getTime();
+    });
+  };
+
+  const todayReservations = getReservationsForToday();
   const openTabs = tabs.filter(t => t.status === 'OPEN');
   const totalOpen = openTabs.reduce((sum, tab) => sum + tab.total, 0);
 
@@ -142,7 +164,6 @@ const Tabs = () => {
           <div className="alert alert-danger">{error}</div>
         )}
 
-        {/* Cards de Resumo */}
         <div className="grid grid-3" style={{ marginBottom: '2rem' }}>
           <div className="card">
             <div className="flex-between">
@@ -169,9 +190,7 @@ const Tabs = () => {
             <div className="flex-between">
               <div>
                 <p className="text-muted text-sm">Total em Aberto</p>
-                <h3 className="text-2xl font-bold text-primary">
-                  R$ {totalOpen.toFixed(2)}
-                </h3>
+                <h3 className="text-2xl font-bold">R$ {totalOpen.toFixed(2)}</h3>
               </div>
               <div style={{ 
                 width: '60px', 
@@ -210,7 +229,6 @@ const Tabs = () => {
           </div>
         </div>
 
-        {/* ✅ FILTRO ATUALIZADO - Com botão limpar */}
         <div className="card" style={{ marginBottom: '2rem' }}>
           <div className="grid grid-2">
             <div className="input-group" style={{ marginBottom: 0 }}>
@@ -281,40 +299,24 @@ const Tabs = () => {
                   <div style={{ marginBottom: '1rem' }}>
                     <div className="flex" style={{ alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                       <User size={14} style={{ color: 'var(--text-light)' }} />
-                      <p className="text-sm">{tab.client.fullName}</p>
+                      <span className="text-sm text-muted">{tab.client.fullName}</span>
                     </div>
-                    
                     {tab.reservation && (
-                      <p className="text-sm text-muted">
-                        {tab.reservation.court.name}
-                      </p>
+                      <div className="flex" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                        <Clock size={14} style={{ color: 'var(--text-light)' }} />
+                        <span className="text-sm text-muted">
+                          {tab.reservation.court.name} - {format(new Date(tab.reservation.startTime), "dd/MM HH:mm", { locale: ptBR })}
+                        </span>
+                      </div>
                     )}
-
-                    <p className="text-sm text-muted">
-                      {format(new Date(tab.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                    </p>
                   </div>
 
                   <div className="flex-between" style={{ paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                    <p className="text-sm text-muted">
-                      {tab.items?.length || 0} item(ns)
-                    </p>
-                    <p className="text-lg font-bold text-primary">
+                    <span className="text-sm text-muted">{tab.items.length} {tab.items.length === 1 ? 'item' : 'itens'}</span>
+                    <span className="font-bold" style={{ color: 'var(--primary-color)' }}>
                       R$ {tab.total.toFixed(2)}
-                    </p>
+                    </span>
                   </div>
-
-                  <button 
-                    className="btn btn-outline"
-                    style={{ width: '100%', marginTop: '1rem' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/tabs/${tab.id}`);
-                    }}
-                  >
-                    <Eye size={16} />
-                    Ver Detalhes
-                  </button>
                 </div>
               );
             })}
@@ -322,69 +324,258 @@ const Tabs = () => {
         )}
       </div>
 
-      {/* Modal de Nova Comanda */}
       {showModal && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-            <div className="card" style={{ margin: 0 }}>
-              <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-                <h2 className="text-xl font-bold">Nova Comanda</h2>
-                <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}>
-                  <X size={24} />
-                </button>
+        <div 
+          className="modal-overlay" 
+          onClick={closeModal}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem'
+          }}
+        >
+          <div 
+            className="modal" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ 
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              margin: '0',
+              animation: 'slideUp 0.3s ease-out'
+            }}
+          >
+            <div 
+              style={{ 
+                background: 'linear-gradient(135deg, #34a853, #2d8e47)',
+                color: 'white',
+                padding: '2rem',
+                borderRadius: '16px 16px 0 0',
+                position: 'relative'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{
+                  width: '50px',
+                  height: '50px',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Receipt size={26} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold" style={{ marginBottom: '0.25rem' }}>Nova Comanda</h2>
+                  <p style={{ opacity: 0.9, fontSize: '0.875rem' }}>Crie uma nova comanda para seu cliente</p>
+                </div>
               </div>
+              <button 
+                onClick={closeModal}
+                style={{
+                  position: 'absolute',
+                  top: '1.5rem',
+                  right: '1.5rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  color: 'white'
+                }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.3)'}
+                onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.2)'}
+              >
+                <X size={20} />
+              </button>
+            </div>
 
-              {error && <div className="alert alert-danger">{error}</div>}
+            <div style={{ padding: '2rem', background: 'white' }}>
+              {error && (
+                <div 
+                  className="alert alert-danger" 
+                  style={{ 
+                    marginBottom: '1.5rem',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem'
+                  }}
+                >
+                  <Info size={20} />
+                  {error}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit}>
-                <div className="input-group">
-                  <label htmlFor="clientId">Cliente *</label>
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label 
+                    htmlFor="clientId" 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      marginBottom: '0.75rem',
+                      fontWeight: '600',
+                      color: 'var(--text-primary)'
+                    }}
+                  >
+                    <Users size={18} style={{ color: '#34a853' }} />
+                    Selecione o Cliente
+                  </label>
                   <select
                     id="clientId"
                     name="clientId"
                     value={formData.clientId}
                     onChange={handleInputChange}
                     required
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      transition: 'all 0.2s',
+                      background: 'var(--bg-light)'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#34a853'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
                   >
-                    <option value="">Selecione um cliente</option>
+                    <option value="">Escolha um cliente da lista</option>
                     {clients.map(client => (
                       <option key={client.id} value={client.id}>
-                        {client.fullName}
+                        {client.fullName} • {client.phone}
                       </option>
                     ))}
                   </select>
+                  {clients.length === 0 && (
+                    <small className="text-muted" style={{ marginTop: '0.5rem', display: 'block' }}>
+                      ⚠️ Nenhum cliente cadastrado ainda
+                    </small>
+                  )}
                 </div>
 
-                <div className="input-group">
-                  <label htmlFor="reservationId">Reserva (Opcional)</label>
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label 
+                    htmlFor="reservationId"
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      marginBottom: '0.75rem',
+                      fontWeight: '600',
+                      color: 'var(--text-primary)'
+                    }}
+                  >
+                    <Calendar size={18} style={{ color: '#34a853' }} />
+                    Vincular a uma Reserva
+                    <span 
+                      style={{ 
+                        fontSize: '0.75rem', 
+                        background: 'var(--bg-dark)', 
+                        padding: '0.25rem 0.5rem', 
+                        borderRadius: '6px',
+                        color: 'var(--text-light)'
+                      }}
+                    >
+                      opcional
+                    </span>
+                  </label>
                   <select
                     id="reservationId"
                     name="reservationId"
                     value={formData.reservationId}
                     onChange={handleInputChange}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      transition: 'all 0.2s',
+                      background: 'var(--bg-light)'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#34a853'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
                   >
-                    <option value="">Sem reserva associada</option>
-                    {reservations
-                      .filter(r => r.status === 'CONFIRMED')
-                      .map(reservation => (
-                        <option key={reservation.id} value={reservation.id}>
-                          {reservation.court.name} - {format(new Date(reservation.startTime), "dd/MM HH:mm", { locale: ptBR })}
-                        </option>
-                      ))}
+                    <option value="">Sem reserva vinculada</option>
+                    {todayReservations.map(reservation => (
+                      <option key={reservation.id} value={reservation.id}>
+                        {reservation.court.name} • {format(new Date(reservation.startTime), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                      </option>
+                    ))}
                   </select>
-                </div>
-
-                <div className="alert" style={{ background: 'var(--bg-dark)', border: 'none', marginBottom: '1.5rem' }}>
-                  <p className="text-sm text-muted">
-                    💡 Após criar a comanda, você poderá adicionar itens e produtos
-                  </p>
+                  <div 
+                    style={{ 
+                      marginTop: '0.75rem', 
+                      padding: '0.875rem',
+                      background: 'var(--bg-light)',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      border: '1px solid var(--border-color)'
+                    }}
+                  >
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      background: '#34a853',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <Calendar size={16} style={{ color: 'white' }} />
+                    </div>
+                    <small className="text-muted" style={{ lineHeight: '1.5' }}>
+                      {todayReservations.length > 0 ? (
+                        <>Exibindo <strong>{todayReservations.length}</strong> {todayReservations.length === 1 ? 'reserva confirmada' : 'reservas confirmadas'} de hoje</>
+                      ) : (
+                        <>Não há reservas confirmadas para hoje</>
+                      )}
+                    </small>
+                  </div>
                 </div>
 
                 <div className="flex" style={{ gap: '1rem' }}>
-                  <button type="button" className="btn btn-outline" onClick={closeModal} style={{ flex: 1 }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-outline" 
+                    onClick={closeModal} 
+                    style={{ 
+                      flex: 1,
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      fontWeight: '600',
+                      fontSize: '1rem'
+                    }}
+                  >
                     Cancelar
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary" 
+                    style={{ 
+                      flex: 1,
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      fontWeight: '600',
+                      fontSize: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <PlusCircle size={20} />
                     Criar Comanda
                   </button>
                 </div>
@@ -393,8 +584,21 @@ const Tabs = () => {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </>
   );
 };
 
-export default Tabs;  
+export default Tabs;

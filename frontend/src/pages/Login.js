@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { AlertCircle, Clock, XCircle, Ban } from 'lucide-react';
 import logo from '../utils/complex.png';
 
 const Login = () => {
@@ -12,6 +13,7 @@ const Login = () => {
   });
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
@@ -21,17 +23,15 @@ const Login = () => {
     });
   };
 
-  // Em Login.js, atualize a função handleSubmit:
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setErrorType('');
     setLoading(true);
 
     const result = await login(formData.email, formData.password);
 
     if (result.success) {
-      // Redirecionar baseado no role
       if (result.role === 'SUPER_ADMIN') {
         navigate('/super-admin');
       } else {
@@ -39,10 +39,38 @@ const Login = () => {
       }
     } else {
       setError(result.error);
+      setErrorType(result.status || 'error');
     }
 
     setLoading(false);
   };
+
+  const getErrorIcon = () => {
+    switch(errorType) {
+      case 'PENDING':
+        return <Clock size={20} color="#fbbc04" />;
+      case 'REJECTED':
+        return <XCircle size={20} color="#ea4335" />;
+      case 'SUSPENDED':
+        return <Ban size={20} color="#ea4335" />;
+      default:
+        return <AlertCircle size={20} color="#ea4335" />;
+    }
+  };
+
+  const getErrorColor = () => {
+    switch(errorType) {
+      case 'PENDING':
+        return { bg: '#fff4e5', border: '#fbbc04', text: '#c77700' };
+      case 'REJECTED':
+      case 'SUSPENDED':
+        return { bg: '#ffebee', border: '#ea4335', text: '#c62828' };
+      default:
+        return { bg: '#ffebee', border: '#ea4335', text: '#c62828' };
+    }
+  };
+
+  const errorColors = getErrorColor();
 
   return (
     <div style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
@@ -93,20 +121,21 @@ const Login = () => {
           }
           .login-container {
             width: 90vw !important;
-            max-width: 500px !important;
+            max-width: 450px !important;
           }
           .login-panel {
-            padding: 40px 30px !important;
+            padding: 50px 30px !important;
           }
         }
         
         @media (max-width: 480px) {
           .login-container {
             width: 95vw !important;
-            height: 90vh !important;
+            height: auto !important;
+            min-height: 500px !important;
           }
           .login-panel {
-            padding: 30px 20px !important;
+            padding: 40px 20px !important;
           }
         }
       `}</style>
@@ -118,104 +147,56 @@ const Login = () => {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'linear-gradient(135deg, #34a853 0%, #2d8f47 100%)',
-        padding: '0',
-        margin: '0',
-        overflow: 'hidden',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif'
       }}>
         <div className="login-container">
-
           <div className="illustration-panel">
             <div style={{
-              position: 'absolute',
-              top: '-50px',
-              left: '-50px',
-              width: '200px',
-              height: '200px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%'
-            }}></div>
-
-            <div style={{
-              position: 'absolute',
-              bottom: '-80px',
-              right: '-80px',
-              width: '250px',
-              height: '250px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%'
-            }}></div>
-
-            <div style={{
-              position: 'relative',
-              zIndex: 1,
-              textAlign: 'center'
+              textAlign: 'center',
+              color: 'white',
+              zIndex: 1
             }}>
-              <div style={{
-                width: '280px',
-                height: '280px',
-                margin: '0 auto',
-                position: 'relative'
-              }}>
-                <div style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '40px'
-                }}>
-                  <img
-                    src={logo}
-                    alt="QuadraCerta Logo"
-                    style={{
-                      width: '320px',
-                      height: '320px',
-                      objectFit: 'contain',
-                      marginBottom: '40px',
-                      filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.15))'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{
-                marginTop: '30px',
-                color: 'white',
-                fontSize: '28px',
-                fontWeight: '600',
-                textShadow: '0 2px 10px rgba(0,0,0,0.1)'
+              <img
+                src={logo}
+                alt="QuadraCerta"
+                style={{
+                  width: '120px',
+                  height: '120px',
+                  marginBottom: '30px',
+                  opacity: 0.95
+                }}
+              />
+              <h1 style={{
+                fontSize: '48px',
+                fontWeight: '700',
+                marginBottom: '20px',
+                textShadow: '0 2px 10px rgba(0,0,0,0.2)'
               }}>
                 QuadraCerta
-              </div>
-              <div style={{
-                color: 'rgba(255, 255, 255, 0.9)',
-                fontSize: '14px',
-                marginTop: '8px'
+              </h1>
+              <p style={{
+                fontSize: '18px',
+                fontWeight: '300',
+                textShadow: '0 2px 10px rgba(0,0,0,0.2)'
               }}>
-                Gerencie suas quadras com facilidade
-              </div>
+                Gestão completa para complexos esportivos
+              </p>
             </div>
           </div>
 
           <div className="login-panel">
-            <div style={{
-              maxWidth: '350px',
-              margin: '0 auto',
-              width: '100%'
-            }}>
+            <div style={{ maxWidth: '380px', width: '100%', margin: '0 auto' }}>
               <h2 style={{
-                fontSize: '28px',
+                fontSize: '32px',
                 fontWeight: '600',
                 color: '#333',
-                marginBottom: '8px',
+                marginBottom: '10px',
                 textAlign: 'center'
               }}>
-                LOGIN
+                BEM-VINDO
               </h2>
               <p style={{
-                fontSize: '13px',
+                fontSize: '14px',
                 color: '#666',
                 marginBottom: '30px',
                 textAlign: 'center'
@@ -225,16 +206,39 @@ const Login = () => {
 
               {error && (
                 <div style={{
-                  padding: '12px 15px',
-                  background: '#fee',
-                  border: '1px solid #fcc',
-                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '14px 16px',
+                  background: errorColors.bg,
+                  border: `1px solid ${errorColors.border}`,
+                  borderRadius: '10px',
                   marginBottom: '20px',
-                  fontSize: '13px',
-                  color: '#c33',
-                  textAlign: 'center'
+                  animation: 'slideDown 0.3s ease-out'
                 }}>
-                  {error}
+                  <div style={{ marginTop: '2px' }}>
+                    {getErrorIcon()}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{
+                      fontSize: '13px',
+                      color: errorColors.text,
+                      margin: 0,
+                      lineHeight: '1.5'
+                    }}>
+                      {error}
+                    </p>
+                    {errorType === 'SUSPENDED' && (
+                      <p style={{
+                        fontSize: '12px',
+                        color: errorColors.text,
+                        margin: '8px 0 0 0',
+                        lineHeight: '1.5'
+                      }}>
+                        <strong>Dúvidas?</strong> Entre em contato com o administrador do sistema.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -242,9 +246,9 @@ const Login = () => {
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{
                     display: 'block',
-                    fontSize: '12px',
+                    fontSize: '13px',
                     color: '#666',
-                    marginBottom: '6px',
+                    marginBottom: '8px',
                     fontWeight: '500'
                   }}>
                     Email
@@ -258,7 +262,7 @@ const Login = () => {
                     required
                     style={{
                       width: '100%',
-                      padding: '12px 15px',
+                      padding: '12px 14px',
                       fontSize: '14px',
                       border: 'none',
                       borderRadius: '8px',
@@ -282,9 +286,9 @@ const Login = () => {
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{
                     display: 'block',
-                    fontSize: '12px',
+                    fontSize: '13px',
                     color: '#666',
-                    marginBottom: '6px',
+                    marginBottom: '8px',
                     fontWeight: '500'
                   }}>
                     Senha
@@ -298,7 +302,7 @@ const Login = () => {
                     required
                     style={{
                       width: '100%',
-                      padding: '12px 15px',
+                      padding: '12px 14px',
                       fontSize: '14px',
                       border: 'none',
                       borderRadius: '8px',
@@ -336,12 +340,7 @@ const Login = () => {
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      style={{
-                        marginRight: '6px',
-                        cursor: 'pointer',
-                        width: '15px',
-                        height: '15px'
-                      }}
+                      style={{ marginRight: '6px' }}
                     />
                     Lembrar-me
                   </label>
@@ -414,6 +413,19 @@ const Login = () => {
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   );
 };

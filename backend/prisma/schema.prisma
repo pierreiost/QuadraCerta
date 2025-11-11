@@ -54,34 +54,51 @@ model UserPermission {
 }
 
 model Complex {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  cnpj        String   @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id          String      @id @default(uuid())
+  name        String      // ✅ SEM @unique
+  cnpj        String      @unique
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   
   users       User[]
   courts      Court[]
   clients     Client[]
   products    Product[]
+  courtTypes  CourtType[]
   
   @@map("complexes")
 }
 
-model Court {
-  id          String       @id @default(uuid())
+model CourtType {
+  id          String    @id @default(uuid())
   name        String
-  sportType   String
-  capacity    Int
-  pricePerHour Float
-  description String?
-  status      CourtStatus  @default(AVAILABLE)
-  complexId   String
-  complex     Complex      @relation(fields: [complexId], references: [id])
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  isDefault   Boolean   @default(false)
+  complexId   String?
+  complex     Complex?  @relation(fields: [complexId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   
-  reservations Reservation[]
+  courts      Court[]
+  
+  @@unique([name, complexId])
+  @@map("court_types")
+}
+
+model Court {
+  id            String       @id @default(uuid())
+  name          String
+  courtTypeId   String
+  courtType     CourtType    @relation(fields: [courtTypeId], references: [id])
+  capacity      Int          @default(10)
+  pricePerHour  Float
+  description   String?
+  status        CourtStatus  @default(AVAILABLE)
+  complexId     String
+  complex       Complex      @relation(fields: [complexId], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  reservations  Reservation[]
   
   @@map("courts")
 }

@@ -10,19 +10,20 @@ export const usePermissions = () => {
   useEffect(() => {
     if (user) {
       loadPermissions();
+    } else {
+      setPermissions([]);
+      setLoading(false);
     }
   }, [user]);
 
   const loadPermissions = async () => {
     try {
-      // ADMIN e SUPER_ADMIN têm todas as permissões
       if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-        setPermissions(['*']); // Wildcard = todas as permissões
+        setPermissions(['*']);
         setLoading(false);
         return;
       }
 
-      // Carregar permissões do usuário
       const response = await api.get(`/permissions/user/${user.id}`);
       const userPermissions = response.data.permissions.map(
         p => `${p.module}.${p.action}`
@@ -37,14 +38,13 @@ export const usePermissions = () => {
   };
 
   const hasPermission = (module, action) => {
-    // ADMIN sempre tem permissão
+    if (!user) return false;
     if (permissions.includes('*')) return true;
-    
-    // Verificar permissão específica
     return permissions.includes(`${module}.${action}`);
   };
 
   const hasAnyPermission = (permissionsList) => {
+    if (!user) return false;
     if (permissions.includes('*')) return true;
     
     return permissionsList.some(perm => {
@@ -53,11 +53,22 @@ export const usePermissions = () => {
     });
   };
 
+  const hasModule = (module) => {
+    if (!user) return false;
+    if (permissions.includes('*')) return true;
+    return permissions.some(perm => perm.startsWith(`${module}.`));
+  };
+
   return {
     permissions,
     loading,
     hasPermission,
     hasAnyPermission,
-    isAdmin: user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
+    hasModule,
+    isAdmin: user?.role === 'ADMIN',
+    isSuperAdmin: user?.role === 'SUPER_ADMIN',
+    isEmployee: user?.role === 'SEMI_ADMIN'
   };
 };
+
+export default usePermissions;

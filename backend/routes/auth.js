@@ -9,17 +9,17 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// ✅ CORRIGIDO - Rate limiter compatível com IPv6
+// Rate limit para tentativas de login falhadas
 const loginFailureLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   skipSuccessfulRequests: true,
-  message: {
-    error: 'Muitas tentativas de login incorretas. Tente novamente em 15 minutos.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-  // ❌ REMOVIDO keyGenerator - usa o padrão que já trata IPv6
+  message: 'Muitas tentativas de login. Tente novamente em 15 minutos.',
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Muitas tentativas de login. Tente novamente em 15 minutos.'
+    });
+  }
 });
 
 const registerValidation = [
@@ -41,11 +41,7 @@ const registerValidation = [
   
   body('password')
     .notEmpty().withMessage('Senha é obrigatória')
-    .isLength({ min: 8 }).withMessage('Senha deve ter no mínimo 8 caracteres')
-    .matches(/[a-z]/).withMessage('Senha deve conter letras minúsculas')
-    .matches(/[A-Z]/).withMessage('Senha deve conter letras maiúsculas')
-    .matches(/[0-9]/).withMessage('Senha deve conter números')
-    .matches(/[@$!%*?&#]/).withMessage('Senha deve conter caracteres especiais (@$!%*?&#)'),
+    .isLength({ min: 6 }).withMessage('Senha deve ter no mínimo 6 caracteres'),
   
   body('phone')
     .trim()
@@ -87,6 +83,7 @@ router.post('/register', registerValidation, async (req, res) => {
 
     const { firstName, lastName, email, password, phone, cpf, cnpj, complexName } = req.body;
 
+    // Verificar email duplicado
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() }
     });
@@ -95,12 +92,24 @@ router.post('/register', registerValidation, async (req, res) => {
       return res.status(409).json({ error: 'Email já está em uso' });
     }
 
+    // Verificar CNPJ duplicado
     const existingComplex = await prisma.complex.findUnique({
       where: { cnpj }
     });
 
     if (existingComplex) {
       return res.status(409).json({ error: 'CNPJ já está cadastrado' });
+    }
+
+    // ✅ NOVO: Verificar nome do complexo duplicado
+    const existingComplexName = await prisma.complex.findFirst({
+      where: { name: complexName }
+    });
+
+    if (existingComplexName) {
+      return res.status(409).json({ 
+        error: 'Já existe um complexo com este nome. Por favor, escolha outro nome.' 
+      });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -163,6 +172,19 @@ router.post('/register', registerValidation, async (req, res) => {
 
   } catch (error) {
     console.error('Erro no registro:', error);
+    
+    // Tratamento específico para erro de constraint única
+    if (error.code === 'P2002') {
+      if (error.meta?.target?.includes('name')) {
+        return res.status(409).json({ 
+          error: 'Já existe um complexo com este nome. Por favor, escolha outro nome.' 
+        });
+      }
+      if (error.meta?.target?.includes('cnpj')) {
+        return res.status(409).json({ error: 'CNPJ já está cadastrado' });
+      }
+    }
+    
     res.status(500).json({ error: 'Erro ao criar conta. Tente novamente.' });
   }
 });
@@ -256,7 +278,7 @@ router.post('/login', loginFailureLimiter, loginValidation, async (req, res) => 
   }
 });
 
-// Obter dados do usuário logado
+// Rota para obter dados do usuário logado
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
@@ -266,20 +288,18 @@ router.get('/me', authMiddleware, async (req, res) => {
         firstName: true,
         lastName: true,
         email: true,
-        role: true,
-        status: true,
         phone: true,
         cpf: true,
         cnpj: true,
+        role: true,
+        status: true,
         complex: {
           select: {
             id: true,
             name: true,
             cnpj: true
           }
-        },
-        createdAt: true,
-        updatedAt: true
+        }
       }
     });
 
@@ -294,61 +314,80 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Atualizar senha
-router.put('/change-password', 
-  authMiddleware,
-  [
-    body('currentPassword')
-      .notEmpty().withMessage('Senha atual é obrigatória'),
-    
-    body('newPassword')
-      .notEmpty().withMessage('Nova senha é obrigatória')
-      .isLength({ min: 8 }).withMessage('Senha deve ter no mínimo 8 caracteres')
-      .matches(/[a-z]/).withMessage('Senha deve conter letras minúsculas')
-      .matches(/[A-Z]/).withMessage('Senha deve conter letras maiúsculas')
-      .matches(/[0-9]/).withMessage('Senha deve conter números')
-      .matches(/[@$!%*?&#]/).withMessage('Senha deve conter caracteres especiais'),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ 
-          error: 'Dados inválidos',
-          details: errors.array().map(err => err.msg)
-        });
+// Atualizar perfil
+router.put('/profile', authMiddleware, async (req, res) => {
+  try {
+    const { firstName, lastName, phone } = req.body;
+
+    const user = await prisma.user.update({
+      where: { id: req.user.userId },
+      data: {
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(phone && { phone })
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        role: true,
+        complex: {
+          select: {
+            id: true,
+            name: true,
+            cnpj: true
+          }
+        }
       }
+    });
 
-      const { currentPassword, newPassword } = req.body;
-
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.userId }
-      });
-
-      if (!user) {
-        return res.status(404).json({ error: 'Usuário não encontrado' });
-      }
-
-      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-
-      if (!isPasswordValid) {
-        return res.status(401).json({ error: 'Senha atual incorreta' });
-      }
-
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-      await prisma.user.update({
-        where: { id: req.user.userId },
-        data: { password: hashedPassword }
-      });
-
-      res.json({ message: 'Senha alterada com sucesso' });
-
-    } catch (error) {
-      console.error('Erro ao alterar senha:', error);
-      res.status(500).json({ error: 'Erro ao alterar senha' });
-    }
+    res.json({
+      message: 'Perfil atualizado com sucesso',
+      user
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar perfil:', error);
+    res.status(500).json({ error: 'Erro ao atualizar perfil' });
   }
-);
+});
+
+// Alterar senha
+router.put('/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Nova senha deve ter no mínimo 6 caracteres' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId }
+    });
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Senha atual incorreta' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { password: hashedPassword }
+    });
+
+    res.json({ message: 'Senha alterada com sucesso' });
+  } catch (error) {
+    console.error('Erro ao alterar senha:', error);
+    res.status(500).json({ error: 'Erro ao alterar senha' });
+  }
+});
 
 module.exports = router;

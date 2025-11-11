@@ -1,47 +1,105 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
-import { courtService } from '../services/api';
-import { MapPin, Edit2, Trash2, PlusCircle, X } from 'lucide-react';
+import { courtService, courtTypeService } from '../services/api';
+import { MapPin, Edit2, Trash2, PlusCircle, X, AlertCircle, Tag, Plus } from 'lucide-react';
 
 const Courts = () => {
   const navigate = useNavigate();
   const [courts, setCourts] = useState([]);
+  const [courtTypes, setCourtTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showTypeModal, setShowTypeModal] = useState(false);
   const [editingCourt, setEditingCourt] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    sportType: '',
-    capacity: '',
+    courtTypeId: '',
     pricePerHour: '',
     description: '',
     status: 'AVAILABLE'
   });
+  const [typeFormData, setTypeFormData] = useState({ name: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
+
+  const statusOptions = [
+    { value: 'AVAILABLE', label: 'Disponível' },
+    { value: 'OCCUPIED', label: 'Ocupada' },
+    { value: 'MAINTENANCE', label: 'Manutenção' }
+  ];
 
   useEffect(() => {
-    loadCourts();
+    loadData();
   }, []);
 
-  const loadCourts = async () => {
+  const loadData = async () => {
     try {
-      const response = await courtService.getAll();
-      setCourts(response.data);
+      await Promise.all([loadCourts(), loadCourtTypes()]);
     } catch (error) {
-      console.error('Erro ao carregar quadras:', error);
-      setError('Erro ao carregar quadras');
+      console.error('Erro ao carregar dados:', error);
+      setError('Não foi possível carregar os dados');
     } finally {
       setLoading(false);
     }
   };
 
+  const loadCourts = async () => {
+    const response = await courtService.getAll();
+    setCourts(response.data);
+  };
+
+  const loadCourtTypes = async () => {
+    const response = await courtTypeService.getAll();
+    setCourtTypes(response.data);
+  };
+
+  const validateForm = () => {
+    const errors = {};
+
+    if (!formData.name.trim()) {
+      errors.name = 'Nome da quadra é obrigatório';
+    } else if (formData.name.trim().length < 3) {
+      errors.name = 'Nome deve ter pelo menos 3 caracteres';
+    } else if (formData.name.trim().length > 100) {
+      errors.name = 'Nome muito longo (máximo 100 caracteres)';
+    }
+
+    if (!formData.courtTypeId) {
+      errors.courtTypeId = 'Tipo de quadra é obrigatório';
+    }
+
+    if (!formData.pricePerHour) {
+      errors.pricePerHour = 'Preço por hora é obrigatório';
+    } else {
+      const price = parseFloat(formData.pricePerHour);
+      if (isNaN(price) || price < 0) {
+        errors.pricePerHour = 'Preço deve ser um valor positivo';
+      }
+    }
+
+    if (formData.description && formData.description.length > 500) {
+      errors.description = 'Descrição muito longa (máximo 500 caracteres)';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleInputChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+    
+    if (validationErrors[name]) {
+      setValidationErrors({
+        ...validationErrors,
+        [name]: ''
+      });
+    }
   };
 
   const openModal = (court = null) => {
@@ -49,8 +107,7 @@ const Courts = () => {
       setEditingCourt(court);
       setFormData({
         name: court.name,
-        sportType: court.sportType,
-        capacity: court.capacity.toString(),
+        courtTypeId: court.courtTypeId,
         pricePerHour: court.pricePerHour.toString(),
         description: court.description || '',
         status: court.status
@@ -59,8 +116,7 @@ const Courts = () => {
       setEditingCourt(null);
       setFormData({
         name: '',
-        sportType: '',
-        capacity: '',
+        courtTypeId: '',
         pricePerHour: '',
         description: '',
         status: 'AVAILABLE'
@@ -68,6 +124,7 @@ const Courts = () => {
     }
     setShowModal(true);
     setError('');
+    setValidationErrors({});
   };
 
   const closeModal = () => {
@@ -75,32 +132,57 @@ const Courts = () => {
     setEditingCourt(null);
     setFormData({
       name: '',
-      sportType: '',
-      capacity: '',
+      courtTypeId: '',
       pricePerHour: '',
       description: '',
       status: 'AVAILABLE'
     });
     setError('');
+    setValidationErrors({});
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
+    if (!validateForm()) {
+      setError('Por favor, corrija os erros no formulário');
+      return;
+    }
+
     try {
+      const dataToSend = {
+        name: formData.name.trim(),
+        courtTypeId: formData.courtTypeId,
+        pricePerHour: parseFloat(formData.pricePerHour),
+        description: formData.description.trim(),
+        status: formData.status
+      };
+
       if (editingCourt) {
-        await courtService.update(editingCourt.id, formData);
+        await courtService.update(editingCourt.id, dataToSend);
         setSuccess('Quadra atualizada com sucesso!');
       } else {
-        await courtService.create(formData);
+        await courtService.create(dataToSend);
         setSuccess('Quadra criada com sucesso!');
       }
+      
       closeModal();
       loadCourts();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.error || 'Erro ao salvar quadra');
+      console.error('Erro ao salvar quadra:', error);
+      
+      if (error.response?.data?.details) {
+        const backendErrors = {};
+        error.response.data.details.forEach(err => {
+          backendErrors[err.field] = err.message;
+        });
+        setValidationErrors(backendErrors);
+        setError('Verifique os campos destacados');
+      } else {
+        setError(error.response?.data?.error || 'Erro ao salvar quadra. Tente novamente.');
+      }
     }
   };
 
@@ -116,6 +198,42 @@ const Courts = () => {
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.error || 'Erro ao excluir quadra');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  const handleCreateType = async (e) => {
+    e.preventDefault();
+    
+    if (!typeFormData.name.trim()) {
+      setError('Nome do tipo é obrigatório');
+      return;
+    }
+
+    try {
+      await courtTypeService.create({ name: typeFormData.name.trim() });
+      setSuccess('Tipo de quadra criado com sucesso!');
+      setShowTypeModal(false);
+      setTypeFormData({ name: '' });
+      loadCourtTypes();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.error || 'Erro ao criar tipo de quadra');
+    }
+  };
+
+  const handleDeleteType = async (id) => {
+    if (!window.confirm('Tem certeza que deseja excluir este tipo?')) {
+      return;
+    }
+
+    try {
+      await courtTypeService.delete(id);
+      setSuccess('Tipo excluído com sucesso!');
+      loadCourtTypes();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.error || 'Erro ao excluir tipo');
       setTimeout(() => setError(''), 3000);
     }
   };
@@ -145,29 +263,45 @@ const Courts = () => {
       <Header />
       
       <div className="container" style={{ padding: '2rem 1rem' }}>
-        <div className="flex-between" style={{ marginBottom: '2rem' }}>
+        <div className="flex-between" style={{ marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h1 className="text-2xl font-bold">Gerenciar Quadras</h1>
             <p className="text-muted">Cadastre e gerencie as quadras do seu complexo</p>
           </div>
-          <button className="btn btn-primary" onClick={() => openModal()}>
-            <PlusCircle size={18} />
-            Nova Quadra
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setShowTypeModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Tag size={18} />
+              Gerenciar Tipos
+            </button>
+            <button className="btn btn-primary" onClick={() => openModal()}>
+              <PlusCircle size={18} />
+              Nova Quadra
+            </button>
+          </div>
         </div>
 
         {success && (
-          <div className="alert alert-success">{success}</div>
+          <div className="alert alert-success" style={{ marginBottom: '1.5rem' }}>
+            {success}
+          </div>
         )}
 
-        {error && !showModal && (
-          <div className="alert alert-danger">{error}</div>
+        {error && !showModal && !showTypeModal && (
+          <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
+            {error}
+          </div>
         )}
 
         {courts.length === 0 ? (
-          <div className="card text-center" style={{ padding: '3rem' }}>
-            <MapPin size={64} style={{ margin: '0 auto 1rem', color: 'var(--text-light)' }} />
-            <h3 className="font-bold" style={{ marginBottom: '0.5rem' }}>Nenhuma quadra cadastrada</h3>
+          <div className="card" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+            <MapPin size={64} style={{ color: 'var(--gray-400)', margin: '0 auto 1rem' }} />
+            <h3 className="text-xl font-bold" style={{ marginBottom: '0.5rem' }}>
+              Nenhuma quadra cadastrada
+            </h3>
             <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
               Comece cadastrando sua primeira quadra
             </p>
@@ -177,50 +311,48 @@ const Courts = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-3">
-            {courts.map((court) => {
+          <div className="grid grid-3" style={{ gap: '1.5rem' }}>
+            {courts.map(court => {
               const statusBadge = getStatusBadge(court.status);
               return (
-                <div key={court.id} className="card">
+                <div key={court.id} className="card hover-card">
                   <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                    <h3 className="font-bold">{court.name}</h3>
+                    <h3 className="text-lg font-bold">{court.name}</h3>
                     <span className={`badge ${statusBadge.class}`}>
                       {statusBadge.text}
                     </span>
                   </div>
 
                   <div style={{ marginBottom: '1rem' }}>
-                    <p className="text-sm" style={{ marginBottom: '0.5rem' }}>
-                      <strong>Modalidade:</strong> {court.sportType}
+                    <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                      <strong>Tipo:</strong> {court.courtType?.name}
                     </p>
-                    <p className="text-sm" style={{ marginBottom: '0.5rem' }}>
-                      <strong>Capacidade:</strong> {court.capacity} jogadores
-                    </p>
-                    <p className="text-sm font-bold text-primary">
-                      R$ {court.pricePerHour.toFixed(2)}/hora
+                    <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>
+                      <strong>Valor:</strong> R$ {court.pricePerHour.toFixed(2)}/hora
                     </p>
                     {court.description && (
-                      <p className="text-sm text-muted" style={{ marginTop: '0.5rem' }}>
+                      <p className="text-muted" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
                         {court.description}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex" style={{ gap: '0.5rem' }}>
+                  <div className="flex-between" style={{ gap: '0.5rem' }}>
                     <button 
-                      className="btn btn-outline"
-                      style={{ flex: 1, padding: '0.5rem' }}
+                      className="btn btn-secondary"
                       onClick={() => openModal(court)}
+                      style={{ flex: 1 }}
                     >
                       <Edit2 size={16} />
                       Editar
                     </button>
                     <button 
                       className="btn btn-danger"
-                      style={{ padding: '0.5rem' }}
                       onClick={() => handleDelete(court.id)}
+                      style={{ flex: 1 }}
                     >
                       <Trash2 size={16} />
+                      Excluir
                     </button>
                   </div>
                 </div>
@@ -230,11 +362,11 @@ const Courts = () => {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal de Cadastro/Edição de Quadra */}
       {showModal && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="card" style={{ margin: 0 }}>
+            <div className="card" style={{ margin: 0, maxWidth: '600px', width: '100%' }}>
               <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
                 <h2 className="text-xl font-bold">
                   {editingCourt ? 'Editar Quadra' : 'Nova Quadra'}
@@ -245,76 +377,83 @@ const Courts = () => {
                     background: 'none', 
                     border: 'none', 
                     cursor: 'pointer',
-                    padding: '0.5rem'
+                    padding: '0.5rem',
+                    color: 'var(--gray-600)',
+                    transition: 'color 0.2s'
                   }}
+                  onMouseEnter={(e) => e.target.style.color = 'var(--gray-900)'}
+                  onMouseLeave={(e) => e.target.style.color = 'var(--gray-600)'}
                 >
                   <X size={24} />
                 </button>
               </div>
 
               {error && (
-                <div className="alert alert-danger">{error}</div>
+                <div className="alert alert-danger" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <AlertCircle size={18} />
+                  {error}
+                </div>
               )}
 
               <form onSubmit={handleSubmit}>
                 <div className="input-group">
                   <label htmlFor="name">Nome da Quadra *</label>
                   <input
-                    type="text"
                     id="name"
                     name="name"
+                    type="text"
                     value={formData.name}
                     onChange={handleInputChange}
-                    required
-                    placeholder="Ex: Quadra 1 - Society"
+                    placeholder="Ex: Quadra 1 - Central"
+                    className={validationErrors.name ? 'input-error' : ''}
                   />
+                  {validationErrors.name && (
+                    <span className="error-message">{validationErrors.name}</span>
+                  )}
                 </div>
 
-                <div className="grid grid-2">
+                <div className="grid grid-2" style={{ gap: '1rem' }}>
                   <div className="input-group">
-                    <label htmlFor="sportType">Modalidade *</label>
-                    <input
-                      type="text"
-                      id="sportType"
-                      name="sportType"
-                      value={formData.sportType}
+                    <label htmlFor="courtTypeId">Tipo de Quadra *</label>
+                    <select
+                      id="courtTypeId"
+                      name="courtTypeId"
+                      value={formData.courtTypeId}
                       onChange={handleInputChange}
-                      required
-                      placeholder="Ex: Futebol, Vôlei, Tênis"
-                    />
+                      className={validationErrors.courtTypeId ? 'input-error' : ''}
+                    >
+                      <option value="">Selecione o tipo</option>
+                      {courtTypes.map(type => (
+                        <option key={type.id} value={type.id}>
+                          {type.name} {type.isDefault && '(Padrão)'}
+                        </option>
+                      ))}
+                    </select>
+                    {validationErrors.courtTypeId && (
+                      <span className="error-message">{validationErrors.courtTypeId}</span>
+                    )}
                   </div>
 
-                  <div className="input-group">
-                    <label htmlFor="capacity">Capacidade (Linha)*</label>
-                    <input
-                      type="number"
-                      id="capacity"
-                      name="capacity"
-                      value={formData.capacity}
-                      onChange={handleInputChange}
-                      required
-                      min="1"
-                      placeholder="Nº de jogadores"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-2">
                   <div className="input-group">
                     <label htmlFor="pricePerHour">Preço por Hora (R$) *</label>
                     <input
-                      type="number"
                       id="pricePerHour"
                       name="pricePerHour"
-                      value={formData.pricePerHour}
-                      onChange={handleInputChange}
-                      required
+                      type="number"
                       min="0"
                       step="0.01"
-                      placeholder="0.00"
+                      value={formData.pricePerHour}
+                      onChange={handleInputChange}
+                      placeholder="Ex: 120.00"
+                      className={validationErrors.pricePerHour ? 'input-error' : ''}
                     />
+                    {validationErrors.pricePerHour && (
+                      <span className="error-message">{validationErrors.pricePerHour}</span>
+                    )}
                   </div>
+                </div>
 
+                {editingCourt && (
                   <div className="input-group">
                     <label htmlFor="status">Status</label>
                     <select
@@ -323,12 +462,14 @@ const Courts = () => {
                       value={formData.status}
                       onChange={handleInputChange}
                     >
-                      <option value="AVAILABLE">Disponível</option>
-                      <option value="OCCUPIED">Ocupada</option>
-                      <option value="MAINTENANCE">Manutenção</option>
+                      {statusOptions.map(status => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                </div>
+                )}
 
                 <div className="input-group">
                   <label htmlFor="description">Descrição</label>
@@ -337,15 +478,22 @@ const Courts = () => {
                     name="description"
                     value={formData.description}
                     onChange={handleInputChange}
+                    placeholder="Ex: Quadra de grama sintética, com iluminação"
                     rows="3"
-                    placeholder="Informações adicionais sobre a quadra"
+                    className={validationErrors.description ? 'input-error' : ''}
                   />
+                  {validationErrors.description && (
+                    <span className="error-message">{validationErrors.description}</span>
+                  )}
+                  <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+                    {formData.description.length}/500 caracteres
+                  </span>
                 </div>
 
-                <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
+                <div className="flex-between" style={{ gap: '1rem', marginTop: '1.5rem' }}>
                   <button 
                     type="button" 
-                    className="btn btn-outline" 
+                    className="btn btn-secondary"
                     onClick={closeModal}
                     style={{ flex: 1 }}
                   >
@@ -356,10 +504,108 @@ const Courts = () => {
                     className="btn btn-primary"
                     style={{ flex: 1 }}
                   >
-                    {editingCourt ? 'Atualizar' : 'Cadastrar'}
+                    {editingCourt ? 'Salvar Alterações' : 'Cadastrar Quadra'}
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gerenciar Tipos */}
+      {showTypeModal && (
+        <div className="modal-overlay" onClick={() => setShowTypeModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="card" style={{ margin: 0, maxWidth: '500px', width: '100%' }}>
+              <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
+                <h2 className="text-xl font-bold">Gerenciar Tipos de Quadra</h2>
+                <button 
+                  onClick={() => setShowTypeModal(false)}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    cursor: 'pointer',
+                    padding: '0.5rem',
+                    color: 'var(--gray-600)'
+                  }}
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              {error && (
+                <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateType} style={{ marginBottom: '1.5rem' }}>
+                <div className="input-group">
+                  <label htmlFor="typeName">Novo Tipo de Quadra</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      id="typeName"
+                      type="text"
+                      value={typeFormData.name}
+                      onChange={(e) => setTypeFormData({ name: e.target.value })}
+                      placeholder="Ex: Padel, Squash, etc"
+                      style={{ flex: 1 }}
+                    />
+                    <button type="submit" className="btn btn-primary">
+                      <Plus size={18} />
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: '600' }}>
+                  Tipos Cadastrados
+                </h3>
+                {courtTypes.length === 0 ? (
+                  <p className="text-muted">Nenhum tipo cadastrado</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {courtTypes.map(type => (
+                      <div 
+                        key={type.id}
+                        className="flex-between"
+                        style={{ 
+                          padding: '0.75rem',
+                          background: 'var(--gray-50)',
+                          borderRadius: 'var(--radius)',
+                          border: '1px solid var(--gray-200)'
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontWeight: '500' }}>{type.name}</span>
+                          {type.isDefault && (
+                            <span className="badge badge-info" style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>
+                              Padrão
+                            </span>
+                          )}
+                        </div>
+                        {!type.isDefault && (
+                          <button
+                            onClick={() => handleDeleteType(type.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--danger)',
+                              cursor: 'pointer',
+                              padding: '0.25rem'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

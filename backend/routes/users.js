@@ -2,57 +2,24 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const { body, validationResult } = require('express-validator');
-const { authMiddleware, checkRole } = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 const { checkPermission } = require('../middleware/permissions');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 const userValidation = [
-  body('firstName')
-    .trim()
-    .notEmpty().withMessage('Nome é obrigatório')
-    .isLength({ min: 2, max: 50 }).withMessage('Nome deve ter entre 2 e 50 caracteres'),
-  
-  body('lastName')
-    .trim()
-    .notEmpty().withMessage('Sobrenome é obrigatório')
-    .isLength({ min: 2, max: 50 }).withMessage('Sobrenome deve ter entre 2 e 50 caracteres'),
-  
-  body('email')
-    .trim()
-    .notEmpty().withMessage('Email é obrigatório')
-    .isEmail().withMessage('Email inválido')
-    .normalizeEmail(),
-  
-  body('password')
-    .optional()
-    .isLength({ min: 8 }).withMessage('Senha deve ter no mínimo 8 caracteres')
-    .matches(/[a-z]/).withMessage('Senha deve conter letras minúsculas')
-    .matches(/[A-Z]/).withMessage('Senha deve conter letras maiúsculas')
-    .matches(/[0-9]/).withMessage('Senha deve conter números')
-    .matches(/[@$!%*?&#]/).withMessage('Senha deve conter caracteres especiais (@$!%*?&#)'),
-  
-  body('phone')
-    .trim()
-    .notEmpty().withMessage('Telefone é obrigatório')
-    .matches(/^\(\d{2}\)\s?\d{4,5}-\d{4}$/).withMessage('Telefone inválido. Use (XX) XXXXX-XXXX'),
-  
-  body('role')
-    .notEmpty().withMessage('Função é obrigatória')
-    .isIn(['ADMIN', 'SEMI_ADMIN']).withMessage('Função inválida'),
-  
-  body('cpf')
-    .optional()
-    .trim()
-    .matches(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/).withMessage('CPF inválido. Use XXX.XXX.XXX-XX')
+  body('firstName').trim().notEmpty().withMessage('Nome é obrigatório'),
+  body('lastName').trim().notEmpty().withMessage('Sobrenome é obrigatório'),
+  body('email').isEmail().withMessage('Email inválido'),
+  body('phone').notEmpty().withMessage('Telefone é obrigatório'),
+  body('role').isIn(['ADMIN', 'SEMI_ADMIN']).withMessage('Função inválida')
 ];
 
-// Listar todos os usuários do complexo
 router.get('/', authMiddleware, checkPermission('users', 'view'), async (req, res) => {
   try {
     const users = await prisma.user.findMany({
-      where: { 
+      where: {
         complexId: req.user.complexId,
         role: { not: 'SUPER_ADMIN' }
       },
@@ -65,9 +32,13 @@ router.get('/', authMiddleware, checkPermission('users', 'view'), async (req, re
         cpf: true,
         role: true,
         createdAt: true,
-        updatedAt: true
+        permissions: {
+          include: {
+            permission: true
+          }
+        }
       },
-      orderBy: { firstName: 'asc' }
+      orderBy: { createdAt: 'desc' }
     });
 
     res.json(users);
@@ -77,7 +48,6 @@ router.get('/', authMiddleware, checkPermission('users', 'view'), async (req, re
   }
 });
 
-// Buscar usuário por ID
 router.get('/:id', authMiddleware, checkPermission('users', 'view'), async (req, res) => {
   try {
     const user = await prisma.user.findFirst({
@@ -95,7 +65,11 @@ router.get('/:id', authMiddleware, checkPermission('users', 'view'), async (req,
         cpf: true,
         role: true,
         createdAt: true,
-        updatedAt: true
+        permissions: {
+          include: {
+            permission: true
+          }
+        }
       }
     });
 
@@ -110,7 +84,6 @@ router.get('/:id', authMiddleware, checkPermission('users', 'view'), async (req,
   }
 });
 
-// Criar novo funcionário
 router.post('/', authMiddleware, checkPermission('users', 'create'), userValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -121,7 +94,6 @@ router.post('/', authMiddleware, checkPermission('users', 'create'), userValidat
       });
     }
 
-    // NOVO: capture permissionIds do body
     const { firstName, lastName, email, password, phone, cpf, role, permissionIds } = req.body;
 
     const existingUser = await prisma.user.findUnique({
@@ -136,18 +108,23 @@ router.post('/', authMiddleware, checkPermission('users', 'create'), userValidat
       return res.status(403).json({ error: 'Sem permissão para criar administradores' });
     }
 
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Senha deve ter no mínimo 8 caracteres' });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
-        firstName,
-        lastName,
-        email: email.toLowerCase(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.toLowerCase().trim(),
         password: hashedPassword,
         phone,
-        cpf,
+        cpf: cpf || null,
         role,
-        complexId: req.user.complexId
+        complexId: req.user.complexId,
+        status: 'ACTIVE'
       },
       select: {
         id: true,
@@ -161,24 +138,32 @@ router.post('/', authMiddleware, checkPermission('users', 'create'), userValidat
       }
     });
 
-    // NOVO: Bloco para salvar as permissões
-    if (user.role === 'SEMI_ADMIN' && Array.isArray(permissionIds) && permissionIds.length > 0) {
-      await prisma.userPermission.createMany({
-        data: permissionIds.map(permissionId => ({
-          userId: user.id,
-          permissionId: permissionId
-        }))
-      });
+    if (role === 'SEMI_ADMIN' && Array.isArray(permissionIds) && permissionIds.length > 0) {
+      try {
+        await prisma.userPermission.createMany({
+          data: permissionIds.map(permissionId => ({
+            userId: user.id,
+            permissionId: permissionId
+          })),
+          skipDuplicates: true
+        });
+
+        console.log(`✅ Permissões salvas para o usuário ${user.email}:`, permissionIds);
+      } catch (permError) {
+        console.error('Erro ao salvar permissões:', permError);
+      }
     }
 
-    res.status(201).json(user);
+    res.status(201).json({
+      ...user,
+      message: 'Usuário criado com sucesso'
+    });
   } catch (error) {
     console.error('Erro ao criar usuário:', error);
     res.status(500).json({ error: 'Erro ao criar usuário' });
   }
 });
 
-// Atualizar funcionário
 router.put('/:id', authMiddleware, checkPermission('users', 'edit'), userValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -204,28 +189,26 @@ router.put('/:id', authMiddleware, checkPermission('users', 'edit'), userValidat
     }
 
     if (user.id === req.user.userId) {
-      return res.status(403).json({ error: 'Não é possível editar seu próprio usuário por aqui. Use a página de perfil.' });
+      return res.status(403).json({ 
+        error: 'Não é possível editar seu próprio usuário por aqui. Use a página de perfil.' 
+      });
     }
 
     if (email && email.toLowerCase() !== user.email) {
-      const existingEmail = await prisma.user.findUnique({
+      const emailExists = await prisma.user.findUnique({
         where: { email: email.toLowerCase() }
       });
 
-      if (existingEmail) {
+      if (emailExists) {
         return res.status(409).json({ error: 'Email já está em uso' });
       }
-    }
-
-    if (role === 'ADMIN' && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
-      return res.status(403).json({ error: 'Sem permissão para promover a administrador' });
     }
 
     const updatedUser = await prisma.user.update({
       where: { id: req.params.id },
       data: {
-        firstName,
-        lastName,
+        firstName: firstName?.trim(),
+        lastName: lastName?.trim(),
         email: email ? email.toLowerCase() : undefined,
         phone,
         cpf,
@@ -250,7 +233,6 @@ router.put('/:id', authMiddleware, checkPermission('users', 'edit'), userValidat
   }
 });
 
-// Resetar senha de funcionário
 router.put('/:id/reset-password', authMiddleware, checkPermission('users', 'edit'), async (req, res) => {
   try {
     const { newPassword } = req.body;
@@ -276,7 +258,9 @@ router.put('/:id/reset-password', authMiddleware, checkPermission('users', 'edit
     }
 
     if (user.id === req.user.userId) {
-      return res.status(403).json({ error: 'Use a página de perfil para alterar sua própria senha' });
+      return res.status(403).json({ 
+        error: 'Use a página de perfil para alterar sua própria senha' 
+      });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -293,7 +277,6 @@ router.put('/:id/reset-password', authMiddleware, checkPermission('users', 'edit
   }
 });
 
-// Deletar funcionário
 router.delete('/:id', authMiddleware, checkPermission('users', 'delete'), async (req, res) => {
   try {
     const user = await prisma.user.findFirst({

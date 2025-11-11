@@ -6,7 +6,6 @@ const { checkPermission } = require('../middleware/permissions');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Listar produtos
 router.get('/', authMiddleware, checkPermission('products', 'view'), async (req, res) => {
   try {
     const products = await prisma.product.findMany({
@@ -20,7 +19,6 @@ router.get('/', authMiddleware, checkPermission('products', 'view'), async (req,
   }
 });
 
-// Buscar produto específico
 router.get('/:id', authMiddleware, checkPermission('products', 'view'), async (req, res) => {
   try {
     const product = await prisma.product.findFirst({
@@ -47,7 +45,6 @@ router.get('/:id', authMiddleware, checkPermission('products', 'view'), async (r
   }
 });
 
-// Criar produto
 router.post('/', authMiddleware, checkPermission('products', 'create'), async (req, res) => {
   try {
     const { name, description, price, stock, unit, expiryDate } = req.body;
@@ -75,7 +72,6 @@ router.post('/', authMiddleware, checkPermission('products', 'create'), async (r
   }
 });
 
-// Atualizar produto
 router.put('/:id', authMiddleware, checkPermission('products', 'edit'), async (req, res) => {
   try {
     const { name, description, price, stock, unit, expiryDate } = req.body;
@@ -110,13 +106,19 @@ router.put('/:id', authMiddleware, checkPermission('products', 'edit'), async (r
   }
 });
 
-// Deletar produto
 router.delete('/:id', authMiddleware, checkPermission('products', 'delete'), async (req, res) => {
   try {
     const product = await prisma.product.findFirst({
       where: {
         id: req.params.id,
         complexId: req.user.complexId
+      },
+      include: {
+        tabItems: {
+          include: {
+            tab: true
+          }
+        }
       }
     });
 
@@ -124,18 +126,39 @@ router.delete('/:id', authMiddleware, checkPermission('products', 'delete'), asy
       return res.status(404).json({ error: 'Produto não encontrado.' });
     }
 
-    await prisma.product.delete({
-      where: { id: req.params.id }
+    const openTabsWithProduct = product.tabItems.filter(item => item.tab.status === 'OPEN');
+    
+    if (openTabsWithProduct.length > 0) {
+      return res.status(409).json({ 
+        error: 'Não é possível excluir produto que está em comandas abertas',
+        openTabs: openTabsWithProduct.length
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.stockMovement.deleteMany({
+        where: { productId: req.params.id }
+      });
+
+      await tx.product.delete({
+        where: { id: req.params.id }
+      });
     });
 
     res.json({ message: 'Produto deletado com sucesso.' });
   } catch (error) {
-    console.error(error);
+    console.error('Erro ao deletar produto:', error);
+    
+    if (error.code === 'P2003') {
+      return res.status(409).json({ 
+        error: 'Não é possível excluir produto com vínculos ativos. Verifique se não há comandas associadas.' 
+      });
+    }
+
     res.status(500).json({ error: 'Erro ao deletar produto.' });
   }
 });
 
-// Adicionar estoque
 router.post('/:id/stock/add', authMiddleware, checkPermission('products', 'stock'), async (req, res) => {
   try {
     const { quantity, reason } = req.body;
@@ -178,7 +201,6 @@ router.post('/:id/stock/add', authMiddleware, checkPermission('products', 'stock
   }
 });
 
-// Remover estoque
 router.post('/:id/stock/remove', authMiddleware, checkPermission('products', 'stock'), async (req, res) => {
   try {
     const { quantity, reason } = req.body;

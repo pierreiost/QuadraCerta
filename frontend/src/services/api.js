@@ -35,7 +35,7 @@ api.interceptors.response.use(
 // Serviços de Autenticação
 export const authService = {
   register: (data) => api.post('/auth/register', data),
-  login: (email, password) => api.post('/auth/login', { email, password }), // ✅ CORRIGIDO
+  login: (email, password) => api.post('/auth/login', { email, password }),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/profile', data),
   changePassword: (data) => api.put('/auth/change-password', data),
@@ -48,6 +48,14 @@ export const courtService = {
   create: (data) => api.post('/courts', data),
   update: (id, data) => api.put(`/courts/${id}`, data),
   delete: (id) => api.delete(`/courts/${id}`),
+};
+
+// ✅ NOVO: Serviços de Tipos de Quadra
+export const courtTypeService = {
+  getAll: () => api.get('/court-types'),
+  create: (data) => api.post('/court-types', data),
+  update: (id, data) => api.put(`/court-types/${id}`, data),
+  delete: (id) => api.delete(`/court-types/${id}`),
 };
 
 // Serviços de Clientes
@@ -127,5 +135,7 @@ export const notificationService = {
   getAll: () => api.get('/notifications'),
   getSummary: () => api.get('/notifications/summary'),
 };
+
+export { api };
 
 export default api;

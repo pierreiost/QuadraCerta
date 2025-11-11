@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import MaskedInput from '../components/MaskedInput'; // NOVO: Importado
+import MaskedInput from '../components/MaskedInput';
+import { CheckCircle, ArrowLeft } from 'lucide-react';
 
 const Register = () => {
-  const navigate = useNavigate();
   const { register } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
@@ -19,6 +19,8 @@ const Register = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const handleChange = (e) => {
     setFormData({
@@ -98,13 +100,180 @@ const Register = () => {
     const result = await register(formData);
     
     if (result.success) {
-      navigate('/dashboard');
+      setRegisteredEmail(formData.email);
+      setShowSuccess(true);
     } else {
       setError(result.error);
     }
     
     setLoading(false);
   };
+
+  if (showSuccess) {
+    return (
+      <div style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
+        <div style={{
+          height: '100vh',
+          width: '100vw',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #34a853 0%, #2d8f47 100%)',
+          padding: '20px',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '60px 40px',
+            maxWidth: '500px',
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            textAlign: 'center',
+            animation: 'fadeIn 0.5s ease-in-out'
+          }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '80px',
+              height: '80px',
+              background: 'linear-gradient(135deg, #34a853 0%, #2d8f47 100%)',
+              borderRadius: '50%',
+              marginBottom: '30px',
+              animation: 'scaleIn 0.5s ease-in-out 0.2s both'
+            }}>
+              <CheckCircle size={48} color="white" />
+            </div>
+
+            <h1 style={{
+              fontSize: '32px',
+              fontWeight: '700',
+              color: '#34a853',
+              marginBottom: '20px',
+              animation: 'fadeIn 0.5s ease-in-out 0.4s both'
+            }}>
+              Cadastro Realizado!
+            </h1>
+
+            <p style={{
+              fontSize: '16px',
+              color: '#666',
+              marginBottom: '10px',
+              lineHeight: '1.6',
+              animation: 'fadeIn 0.5s ease-in-out 0.6s both'
+            }}>
+              Sua solicitação de cadastro foi enviada com sucesso.
+            </p>
+
+            <div style={{
+              background: '#f8f9fa',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '30px',
+              animation: 'fadeIn 0.5s ease-in-out 0.8s both'
+            }}>
+              <p style={{
+                fontSize: '14px',
+                color: '#5f6368',
+                marginBottom: '15px',
+                lineHeight: '1.6'
+              }}>
+                <strong>O que acontece agora?</strong>
+              </p>
+              <div style={{
+                textAlign: 'left',
+                fontSize: '14px',
+                color: '#5f6368',
+                lineHeight: '1.8'
+              }}>
+                <p style={{ marginBottom: '8px' }}>
+                  ✓ Nossa equipe irá analisar seu cadastro
+                </p>
+                <p style={{ marginBottom: '8px' }}>
+                  ✓ Você receberá um email em <strong>{registeredEmail}</strong>
+                </p>
+                <p style={{ marginBottom: '0' }}>
+                  ✓ Após aprovação, você poderá fazer login no sistema
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              padding: '15px',
+              background: '#e8f5e9',
+              borderRadius: '8px',
+              marginBottom: '30px',
+              animation: 'fadeIn 0.5s ease-in-out 1s both'
+            }}>
+              <p style={{
+                fontSize: '13px',
+                color: '#2d8f47',
+                margin: 0,
+                lineHeight: '1.6'
+              }}>
+                <strong>⏱️ Tempo estimado:</strong> A aprovação geralmente ocorre em até 24 horas úteis.
+              </p>
+            </div>
+
+            <Link
+              to="/login"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '14px 32px',
+                background: 'linear-gradient(135deg, #34a853 0%, #2d8f47 100%)',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                fontWeight: '600',
+                fontSize: '14px',
+                boxShadow: '0 4px 15px rgba(52, 168, 83, 0.3)',
+                transition: 'all 0.3s ease',
+                animation: 'fadeIn 0.5s ease-in-out 1.2s both'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 6px 20px rgba(52, 168, 83, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 4px 15px rgba(52, 168, 83, 0.3)';
+              }}
+            >
+              <ArrowLeft size={18} />
+              Voltar para Login
+            </Link>
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @keyframes scaleIn {
+            from {
+              opacity: 0;
+              transform: scale(0.5);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
@@ -186,134 +355,42 @@ const Register = () => {
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif'
       }}>
         <div className="register-container">
-          
           <div className="illustration-panel">
             <div style={{
-              position: 'absolute',
-              top: '-50px',
-              left: '-50px',
-              width: '200px',
-              height: '200px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%'
-            }}></div>
-            
-            <div style={{
-              position: 'absolute',
-              bottom: '-80px',
-              right: '-80px',
-              width: '250px',
-              height: '250px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%'
-            }}></div>
-
-            <div style={{
-              position: 'relative',
-              zIndex: 1,
-              textAlign: 'center'
+              textAlign: 'center',
+              color: 'white',
+              zIndex: 1
             }}>
-              <div style={{
-                width: '120px',
-                height: '120px',
-                margin: '0 auto 30px',
-                background: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backdropFilter: 'blur(10px)',
-                border: '3px solid rgba(255, 255, 255, 0.3)'
+              <h1 style={{
+                fontSize: '48px',
+                fontWeight: '700',
+                marginBottom: '20px',
+                textShadow: '0 2px 10px rgba(0,0,0,0.2)'
               }}>
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="8.5" cy="7" r="4" />
-                  <line x1="20" y1="8" x2="20" y2="14" />
-                  <line x1="23" y1="11" x2="17" y2="11" />
-                </svg>
-              </div>
-
-              <div style={{
-                color: 'white',
-                fontSize: '28px',
-                fontWeight: '600',
-                textShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                marginBottom: '16px'
+                QuadraCerta
+              </h1>
+              <p style={{
+                fontSize: '18px',
+                fontWeight: '300',
+                marginBottom: '40px',
+                textShadow: '0 2px 10px rgba(0,0,0,0.2)'
               }}>
-                Bem-vindo ao QuadraCerta
-              </div>
+                Gestão completa para complexos esportivos
+              </p>
               <div style={{
-                color: 'rgba(255, 255, 255, 0.9)',
                 fontSize: '14px',
-                maxWidth: '320px',
-                margin: '0 auto',
-                lineHeight: '1.6'
+                opacity: 0.9
               }}>
-                Crie sua conta e comece a gerenciar suas quadras de forma profissional
-              </div>
-
-              <div style={{
-                marginTop: '40px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-                maxWidth: '280px',
-                margin: '40px auto 0'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 16px',
-                  background: 'rgba(255, 255, 255, 0.15)',
-                  borderRadius: '8px',
-                  backdropFilter: 'blur(10px)'
-                }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span style={{ fontSize: '14px', color: 'white' }}>Agendamento Online</span>
-                </div>
-
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 16px',
-                  background: 'rgba(255, 255, 255, 0.15)',
-                  borderRadius: '8px',
-                  backdropFilter: 'blur(10px)'
-                }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span style={{ fontSize: '14px', color: 'white' }}>Controle Financeiro</span>
-                </div>
-
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 16px',
-                  background: 'rgba(255, 255, 255, 0.15)',
-                  borderRadius: '8px',
-                  backdropFilter: 'blur(10px)'
-                }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span style={{ fontSize: '14px', color: 'white' }}>Gestão de Clientes</span>
-                </div>
+                ✓ Controle de quadras<br />
+                ✓ Agendamentos inteligentes<br />
+                ✓ Gestão financeira<br />
+                ✓ Comandas e estoque
               </div>
             </div>
           </div>
 
           <div className="register-panel">
-            <div style={{
-              maxWidth: '400px',
-              margin: '0 auto',
-              width: '100%'
-            }}>
+            <div style={{ maxWidth: '400px', width: '100%', margin: '0 auto' }}>
               <h2 style={{
                 fontSize: '26px',
                 fontWeight: '600',
@@ -443,6 +520,46 @@ const Register = () => {
                     marginBottom: '4px',
                     fontWeight: '500'
                   }}>
+                    Nome do Complexo *
+                  </label>
+                  <input
+                    type="text"
+                    name="complexName"
+                    value={formData.complexName}
+                    onChange={handleChange}
+                    placeholder="Ex: Arena Sports Center"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      outline: 'none',
+                      background: 'white',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+                      boxSizing: 'border-box',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.boxShadow = '0 2px 10px rgba(52, 168, 83, 0.2)';
+                      e.target.style.transform = 'translateY(-1px)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.boxShadow = '0 2px 5px rgba(0,0,0,0.05)';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '11px',
+                    color: '#666',
+                    marginBottom: '4px',
+                    fontWeight: '500'
+                  }}>
                     Email *
                   </label>
                   <input
@@ -510,14 +627,6 @@ const Register = () => {
                         boxSizing: 'border-box',
                         transition: 'all 0.3s ease'
                       }}
-                      onFocus={(e) => {
-                        e.target.style.boxShadow = '0 2px 10px rgba(52, 168, 83, 0.2)';
-                        e.target.style.transform = 'translateY(-1px)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.boxShadow = '0 2px 5px rgba(0,0,0,0.05)';
-                        e.target.style.transform = 'translateY(0)';
-                      }}
                     />
                   </div>
 
@@ -549,14 +658,6 @@ const Register = () => {
                         boxSizing: 'border-box',
                         transition: 'all 0.3s ease'
                       }}
-                      onFocus={(e) => {
-                        e.target.style.boxShadow = '0 2px 10px rgba(52, 168, 83, 0.2)';
-                        e.target.style.transform = 'translateY(-1px)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.boxShadow = '0 2px 5px rgba(0,0,0,0.05)';
-                        e.target.style.transform = 'translateY(0)';
-                      }}
                     />
                   </div>
                 </div>
@@ -569,7 +670,7 @@ const Register = () => {
                     marginBottom: '4px',
                     fontWeight: '500'
                   }}>
-                    CNPJ do Complexo *
+                    CNPJ *
                   </label>
                   <MaskedInput
                     mask="cnpj"
@@ -578,7 +679,6 @@ const Register = () => {
                     onChange={handleChange}
                     placeholder="00.000.000/0000-00"
                     required
-                    maxLength="18"
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -590,54 +690,6 @@ const Register = () => {
                       boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
                       boxSizing: 'border-box',
                       transition: 'all 0.3s ease'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.boxShadow = '0 2px 10px rgba(52, 168, 83, 0.2)';
-                      e.target.style.transform = 'translateY(-1px)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.boxShadow = '0 2px 5px rgba(0,0,0,0.05)';
-                      e.target.style.transform = 'translateY(0)';
-                    }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '11px',
-                    color: '#666',
-                    marginBottom: '4px',
-                    fontWeight: '500'
-                  }}>
-                    Nome do Complexo *
-                  </label>
-                  <input
-                    type="text"
-                    name="complexName"
-                    value={formData.complexName}
-                    onChange={handleChange}
-                    placeholder="Arena Sports Center"
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      fontSize: '13px',
-                      border: 'none',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      background: 'white',
-                      boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                      boxSizing: 'border-box',
-                      transition: 'all 0.3s ease'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.boxShadow = '0 2px 10px rgba(52, 168, 83, 0.2)';
-                      e.target.style.transform = 'translateY(-1px)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.boxShadow = '0 2px 5px rgba(0,0,0,0.05)';
-                      e.target.style.transform = 'translateY(0)';
                     }}
                   />
                 </div>
@@ -680,7 +732,7 @@ const Register = () => {
                       e.target.style.transform = 'translateY(0)';
                     }}
                   />
-                  <small style={{ fontSize: '10px', color: '#999', display: 'block', marginTop: '3px' }}>
+                  <small style={{ fontSize: '10px', color: '#888', marginTop: '4px', display: 'block' }}>
                     Mín. 8 caracteres, maiúsculas, minúsculas, números e especiais
                   </small>
                 </div>

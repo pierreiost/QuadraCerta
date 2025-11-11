@@ -40,12 +40,13 @@ export const AuthProvider = ({ children }) => {
       
       return { 
         success: true,
-        role: user.role // Retorna o role para redirecionar corretamente
+        role: user.role
       };
     } catch (error) {
       return {
         success: false,
         error: error.response?.data?.error || 'Erro ao fazer login',
+        status: error.response?.data?.status
       };
     }
   };
@@ -53,13 +54,12 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const response = await authService.register(userData);
-      const { token, user } = response.data;
       
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      setUser(user);
-      
-      return { success: true };
+      return { 
+        success: true,
+        message: response.data.message,
+        user: response.data.user
+      };
     } catch (error) {
       return {
         success: false,
