@@ -1,7 +1,6 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
-const { addHours, subMinutes } = require('date-fns');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -11,13 +10,10 @@ router.get('/', authMiddleware, async (req, res) => {
     const notifications = [];
     const now = new Date();
     const in30Minutes = new Date(now.getTime() + 30 * 60 * 1000);
-    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
     console.log('🔔 Buscando notificações...');
     console.log('⏰ Hora atual:', now.toISOString());
-    console.log('⏰ +30min:', in30Minutes.toISOString());
 
-    // 1. ESTOQUE BAIXO (< 10 unidades)
     const lowStockProducts = await prisma.product.findMany({
       where: {
         complexId: req.user.complexId,
@@ -45,7 +41,6 @@ router.get('/', authMiddleware, async (req, res) => {
       });
     });
 
-    // 2. RESERVAS PRÓXIMAS (próximos 30 minutos)
     const upcomingReservations = await prisma.reservation.findMany({
       where: {
         court: { complexId: req.user.complexId },
@@ -63,9 +58,6 @@ router.get('/', authMiddleware, async (req, res) => {
     });
 
     console.log(`📅 Reservas nos próximos 30min: ${upcomingReservations.length}`);
-    upcomingReservations.forEach(r => {
-      console.log(`  - ${r.client.fullName}: ${new Date(r.startTime).toISOString()}`);
-    });
 
     upcomingReservations.forEach(reservation => {
       const reservationTime = new Date(reservation.startTime);
@@ -82,7 +74,6 @@ router.get('/', authMiddleware, async (req, res) => {
       });
     });
 
-    // 3. COMANDAS ABERTAS HÁ MUITO TEMPO (> 4 horas)
     const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
     const oldOpenTabs = await prisma.tab.findMany({
       where: {
@@ -111,7 +102,6 @@ router.get('/', authMiddleware, async (req, res) => {
       });
     });
 
-    // 4. QUADRAS EM MANUTENÇÃO
     const maintenanceCourts = await prisma.court.findMany({
       where: {
         complexId: req.user.complexId,
@@ -120,7 +110,11 @@ router.get('/', authMiddleware, async (req, res) => {
       select: {
         id: true,
         name: true,
-        sportType: true
+        courtType: {
+          select: {
+            name: true
+          }
+        }
       }
     });
 
@@ -132,13 +126,12 @@ router.get('/', authMiddleware, async (req, res) => {
         type: 'MAINTENANCE',
         priority: 'LOW',
         title: 'Quadra em manutenção',
-        message: `${court.name} - ${court.sportType}`,
+        message: `${court.name} - ${court.courtType.name}`,
         link: '/courts',
         createdAt: now
       });
     });
 
-    // 5. PRODUTOS PRÓXIMOS DO VENCIMENTO (próximos 7 dias)
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const expiringProducts = await prisma.product.findMany({
       where: {
@@ -171,7 +164,6 @@ router.get('/', authMiddleware, async (req, res) => {
       });
     });
 
-    // 6. RESERVAS PENDENTES
     const pendingReservations = await prisma.reservation.findMany({
       where: {
         court: { complexId: req.user.complexId },

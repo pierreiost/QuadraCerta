@@ -1,11 +1,10 @@
 const { body, param, query, validationResult } = require('express-validator');
 
-// Middleware para verificar resultado da validação
 const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ 
-      error: 'Dados inválidos',
+      error: errors.array()[0].msg,
       details: errors.array().map(err => ({
         field: err.path,
         message: err.msg
@@ -15,7 +14,6 @@ const validate = (req, res, next) => {
   next();
 };
 
-// Validações para Quadras (Courts)
 const courtValidators = {
   create: [
     body('name')
@@ -76,7 +74,6 @@ const courtValidators = {
   ]
 };
 
-// Validações para Clientes (Clients)
 const clientValidators = {
   create: [
     body('fullName')
@@ -132,7 +129,6 @@ const clientValidators = {
   ]
 };
 
-// Validações para Reservas (Reservations)
 const reservationValidators = {
   create: [
     body('courtId')
@@ -145,14 +141,7 @@ const reservationValidators = {
     
     body('startTime')
       .notEmpty().withMessage('Horário de início é obrigatório')
-      .isISO8601().withMessage('Data/hora inválida')
-      .custom((value) => {
-        const date = new Date(value);
-        if (date < new Date()) {
-          throw new Error('Data/hora deve ser no futuro');
-        }
-        return true;
-      }),
+      .isISO8601().withMessage('Data/hora inválida'),
     
     body('durationInHours')
       .notEmpty().withMessage('Duração é obrigatória')
@@ -196,7 +185,6 @@ const reservationValidators = {
   ]
 };
 
-// Validações para Produtos (Products)
 const productValidators = {
   create: [
     body('name')
@@ -243,7 +231,6 @@ const productValidators = {
   ]
 };
 
-// Validações para Comandas (Tabs)
 const tabValidators = {
   create: [
     body('clientId')
@@ -279,7 +266,6 @@ const tabValidators = {
   ]
 };
 
-// Validação de UUID genérica
 const validateId = [
   param('id').isUUID().withMessage('ID inválido'),
   validate

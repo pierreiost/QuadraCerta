@@ -6,7 +6,6 @@ const { checkPermission } = require('../middleware/permissions');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Listar clientes
 router.get('/', authMiddleware, checkPermission('clients', 'view'), async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
@@ -20,7 +19,6 @@ router.get('/', authMiddleware, checkPermission('clients', 'view'), async (req, 
   }
 });
 
-// Buscar cliente com histórico
 router.get('/:id', authMiddleware, checkPermission('clients', 'view'), async (req, res) => {
   try {
     const client = await prisma.client.findFirst({
@@ -54,7 +52,6 @@ router.get('/:id', authMiddleware, checkPermission('clients', 'view'), async (re
   }
 });
 
-// Criar cliente
 router.post('/', authMiddleware, checkPermission('clients', 'create'), async (req, res) => {
   try {
     const { fullName, phone, email, cpf } = req.body;
@@ -80,7 +77,6 @@ router.post('/', authMiddleware, checkPermission('clients', 'create'), async (re
   }
 });
 
-// Atualizar cliente
 router.put('/:id', authMiddleware, checkPermission('clients', 'edit'), async (req, res) => {
   try {
     const { fullName, phone, email, cpf } = req.body;
@@ -113,7 +109,6 @@ router.put('/:id', authMiddleware, checkPermission('clients', 'edit'), async (re
   }
 });
 
-// Deletar cliente
 router.delete('/:id', authMiddleware, checkPermission('clients', 'delete'), async (req, res) => {
   try {
     const client = await prisma.client.findFirst({
@@ -125,6 +120,37 @@ router.delete('/:id', authMiddleware, checkPermission('clients', 'delete'), asyn
 
     if (!client) {
       return res.status(404).json({ error: 'Cliente não encontrado.' });
+    }
+
+    const now = new Date();
+
+    const activeReservations = await prisma.reservation.count({
+      where: {
+        clientId: req.params.id,
+        status: { not: 'CANCELLED' },
+        endTime: { gte: now }
+      }
+    });
+
+    if (activeReservations > 0) {
+      return res.status(400).json({ 
+        error: 'Não é possível deletar cliente com reservas ativas. Cancele as reservas primeiro.',
+        activeReservations
+      });
+    }
+
+    const openTabs = await prisma.tab.count({
+      where: {
+        clientId: req.params.id,
+        status: 'OPEN'
+      }
+    });
+
+    if (openTabs > 0) {
+      return res.status(400).json({ 
+        error: 'Não é possível deletar cliente com comandas abertas. Feche as comandas primeiro.',
+        openTabs
+      });
     }
 
     await prisma.client.delete({
