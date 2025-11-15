@@ -264,76 +264,56 @@ const Users = () => {
 
       if (!editingUser) {
         dataToSend.password = formData.password;
+        
+        if (formData.role === 'SEMI_ADMIN' && selectedPermissions.length > 0) {
+          dataToSend.permissionIds = selectedPermissions;
+        }
       }
 
-      let response;
       if (editingUser) {
-        response = await userService.update(editingUser.id, dataToSend);
+        await userService.update(editingUser.id, dataToSend);
       } else {
-        response = await userService.create(dataToSend);
-        
-        if (formData.role === 'SEMI_ADMIN') {
-          try {
-            await permissionService.updateUserPermissions(
-              response.data.id, 
-              selectedPermissions
-            );
-          } catch (permError) {
-            console.error('Erro ao salvar permissões:', permError);
-          }
-        }
+        await userService.create(dataToSend);
       }
 
       setSuccess(editingUser ? 'Usuário atualizado com sucesso!' : 'Usuário cadastrado com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
       
+      await loadUsers();
       closeModal();
-      loadUsers();
     } catch (error) {
       console.error('Erro ao salvar usuário:', error);
-      const errorMsg = error.response?.data?.error || 
-                      error.response?.data?.details?.join(', ') || 
-                      'Erro ao salvar usuário';
-      setError(errorMsg);
+      setError(error.response?.data?.error || 'Erro ao salvar usuário');
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Tem certeza que deseja deletar este usuário?')) {
+  const handleDelete = async (userId) => {
+    if (!window.confirm('Tem certeza que deseja excluir este funcionário? Esta ação não pode ser desfeita.')) {
       return;
     }
 
     try {
-      await userService.delete(id);
-      setSuccess('Usuário deletado com sucesso!');
+      await userService.delete(userId);
+      setSuccess('Funcionário excluído com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
-      loadUsers();
+      await loadUsers();
     } catch (error) {
-      console.error('Erro ao deletar usuário:', error);
-      setError(error.response?.data?.error || 'Erro ao deletar usuário');
+      console.error('Erro ao excluir usuário:', error);
+      setError(error.response?.data?.error || 'Erro ao excluir funcionário');
       setTimeout(() => setError(''), 5000);
     }
-  };
-
-  const handleResetPasswordInputChange = (e) => {
-    const { name, value } = e.target;
-    setResetPasswordData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    if (error) setError('');
   };
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
 
-    if (resetPasswordData.newPassword !== resetPasswordData.confirmPassword) {
-      setError('As senhas não coincidem');
+    if (resetPasswordData.newPassword.length < 8) {
+      setError('Senha deve ter no mínimo 8 caracteres');
       return;
     }
 
-    if (resetPasswordData.newPassword.length < 8) {
-      setError('Senha deve ter no mínimo 8 caracteres');
+    if (resetPasswordData.newPassword !== resetPasswordData.confirmPassword) {
+      setError('As senhas não coincidem');
       return;
     }
 
@@ -388,8 +368,7 @@ const Users = () => {
       <div className="container">
         <div className="flex-between" style={{ marginBottom: '2rem' }}>
           <div>
-            <h1 className="font-bold text-2xl flex items-center" style={{ gap: '0.75rem', marginBottom: '0.5rem', marginTop: '2rem'
-             }}>
+            <h1 className="font-bold text-2xl flex items-center" style={{ gap: '0.75rem', marginBottom: '0.5rem', marginTop: '2rem' }}>
               <UsersIcon size={32} color="#34a853" />
               Gerenciar Funcionários
             </h1>
@@ -402,616 +381,396 @@ const Users = () => {
           </button>
         </div>
 
-        {/* Estatísticas */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+        {success && (
+          <div className="alert alert-success">
+            <Check size={18} />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="alert alert-error">
+            <X size={18} />
+            {error}
+          </div>
+        )}
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '1rem',
           marginBottom: '2rem'
         }}>
-          <div style={{
-            background: 'white',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            border: '2px solid #e5e7eb',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem'
-          }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: '#eff6ff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <UsersIcon size={24} color="#3b82f6" />
+          <div className="metric-card">
+            <div className="metric-icon" style={{ backgroundColor: '#e0f2fe' }}>
+              <UsersIcon size={24} color="#0284c7" />
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>Total de Usuários</p>
-              <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
-                {totalUsers}
-              </p>
+              <div className="metric-label">Total de Usuários</div>
+              <div className="metric-value">{totalUsers}</div>
             </div>
           </div>
 
-          <div style={{
-            background: 'white',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            border: '2px solid #e5e7eb',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem'
-          }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: '#fef2f2',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Shield size={24} color="#ef4444" />
+          <div className="metric-card">
+            <div className="metric-icon" style={{ backgroundColor: '#fef3c7' }}>
+              <Shield size={24} color="#f59e0b" />
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>Administradores</p>
-              <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
-                {adminCount}
-              </p>
+              <div className="metric-label">Administradores</div>
+              <div className="metric-value">{adminCount}</div>
             </div>
           </div>
 
-          <div style={{
-            background: 'white',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            border: '2px solid #e5e7eb',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem'
-          }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: '#f0fdf4',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <UserCheck size={24} color="#22c55e" />
+          <div className="metric-card">
+            <div className="metric-icon" style={{ backgroundColor: '#dbeafe' }}>
+              <UserCheck size={24} color="#3b82f6" />
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>Funcionários</p>
-              <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
-                {employeeCount}
-              </p>
+              <div className="metric-label">Funcionários</div>
+              <div className="metric-value">{employeeCount}</div>
             </div>
           </div>
         </div>
 
-        {error && <div className="alert alert-danger">{error}</div>}
-        {success && <div className="alert alert-success">{success}</div>}
-
         {loading ? (
-          <div className="flex-center" style={{ padding: '3rem' }}>
-            <div className="loading"></div>
+          <div className="card">
+            <p className="text-muted text-center">Carregando funcionários...</p>
           </div>
         ) : users.length === 0 ? (
           <div className="card">
-            <div className="flex-center flex-col" style={{ padding: '3rem', textAlign: 'center' }}>
-              <UserX size={64} color="#9CA3AF" style={{ marginBottom: '1rem' }} />
-              <h3 className="font-bold text-xl" style={{ marginBottom: '0.5rem' }}>
-                Nenhum funcionário cadastrado
-              </h3>
-              <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
-                Comece adicionando o primeiro funcionário ao sistema
-              </p>
-              <button onClick={() => openModal()} className="btn btn-primary">
+            <div className="empty-state">
+              <UserX size={48} color="#9ca3af" />
+              <h3>Nenhum funcionário cadastrado</h3>
+              <p>Comece adicionando o primeiro funcionário ao sistema</p>
+              <button onClick={() => openModal()} className="btn btn-primary" style={{ marginTop: '1rem' }}>
                 <PlusCircle size={20} />
-                Cadastrar Primeiro Funcionário
+                Adicionar Funcionário
               </button>
             </div>
           </div>
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
             gap: '1.5rem'
           }}>
-            {users.map((user) => {
-              const createdDate = parseISO(user.createdAt);
-              const avatarColor = getAvatarColor(user.firstName);
-              const initials = getInitials(user.firstName, user.lastName);
-
-              return (
-                <div
-                  key={user.id}
-                  style={{
-                    background: 'white',
-                    borderRadius: '16px',
-                    border: '2px solid #e5e7eb',
-                    padding: '1.5rem',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.1)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'start', gap: '1rem', marginBottom: '1rem' }}>
-                    <div style={{
-                      width: '56px',
-                      height: '56px',
-                      borderRadius: '14px',
-                      background: avatarColor,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'white',
-                      fontWeight: '700',
-                      fontSize: '1.25rem',
-                      flexShrink: 0
-                    }}>
-                      {initials}
-                    </div>
-                    
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h3 style={{
-                        margin: '0 0 0.25rem 0',
-                        fontSize: '1.125rem',
-                        fontWeight: '600',
-                        color: '#111827',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {user.firstName} {user.lastName}
-                      </h3>
-                      <p style={{
-                        margin: '0 0 0.5rem 0',
-                        fontSize: '0.875rem',
-                        color: '#6b7280',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {user.email}
-                      </p>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '6px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        background: user.role === 'ADMIN' ? '#fef2f2' : '#eff6ff',
-                        color: user.role === 'ADMIN' ? '#dc2626' : '#2563eb'
-                      }}>
-                        {user.role === 'ADMIN' ? 'Administrador' : 'Funcionário'}
-                      </span>
-                    </div>
-                  </div>
-
+            {users.map(user => (
+              <div key={user.id} className="card" style={{
+                padding: '1.5rem',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer'
+              }} onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.1)';
+              }} onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+              }}>
+                <div className="flex-between" style={{ marginBottom: '1rem' }}>
                   <div style={{
-                    padding: '1rem 0',
-                    borderTop: '1px solid #f3f4f6',
-                    borderBottom: '1px solid #f3f4f6',
-                    margin: '1rem 0',
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    backgroundColor: getAvatarColor(user.firstName),
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem'
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '1.25rem',
+                    fontWeight: 'bold'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>📞</span>
-                      <span style={{ fontSize: '0.875rem', color: '#4b5563' }}>{user.phone}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>📅</span>
-                      <span style={{ fontSize: '0.875rem', color: '#4b5563' }}>
-                        Desde {format(createdDate, "dd/MM/yyyy", { locale: ptBR })}
-                      </span>
-                    </div>
+                    {getInitials(user.firstName, user.lastName)}
                   </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openModal(user);
-                      }}
-                      title="Editar usuário"
-                      style={{
-                        padding: '0.5rem',
-                        background: '#f3f4f6',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#e5e7eb'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                      onClick={() => openModal(user)}
+                      className="btn-icon btn-icon-success"
+                      title="Editar funcionário"
                     >
-                      <Edit2 size={18} color="#6b7280" />
+                      <Edit2 size={18} />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openResetPasswordModal(user);
-                      }}
+                      onClick={() => openResetPasswordModal(user)}
+                      className="btn-icon btn-icon-warning"
                       title="Resetar senha"
-                      style={{
-                        padding: '0.5rem',
-                        background: '#f3f4f6',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#e5e7eb'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#f3f4f6'}
                     >
-                      <Key size={18} color="#6b7280" />
+                      <Key size={18} />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(user.id);
-                      }}
-                      title="Deletar usuário"
-                      style={{
-                        padding: '0.5rem',
-                        background: '#fef2f2',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#fef2f2'}
+                      onClick={() => handleDelete(user.id)}
+                      className="btn-icon btn-icon-danger"
+                      title="Excluir funcionário"
                     >
-                      <Trash2 size={18} color="#dc2626" />
+                      <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
-              );
-            })}
+
+                <h3 style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  marginBottom: '0.25rem',
+                  color: '#1f2937'
+                }}>
+                  {user.firstName} {user.lastName}
+                </h3>
+
+                <p style={{
+                  color: '#6b7280',
+                  fontSize: '0.875rem',
+                  marginBottom: '1rem'
+                }}>
+                  {user.email}
+                </p>
+
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem',
+                  paddingTop: '1rem',
+                  borderTop: '1px solid #e5e7eb'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '0.875rem'
+                  }}>
+                    <span style={{ color: '#6b7280' }}>Cargo</span>
+                    <span style={{
+                      fontWeight: '500',
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '9999px',
+                      fontSize: '0.75rem',
+                      backgroundColor: user.role === 'ADMIN' ? '#fef3c7' : '#dbeafe',
+                      color: user.role === 'ADMIN' ? '#92400e' : '#1e40af'
+                    }}>
+                      {user.role === 'ADMIN' ? 'Administrador' : 'Funcionário'}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '0.875rem'
+                  }}>
+                    <span style={{ color: '#6b7280' }}>Telefone</span>
+                    <span style={{ fontWeight: '500', color: '#1f2937' }}>{user.phone}</span>
+                  </div>
+
+                  {user.cpf && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '0.875rem'
+                    }}>
+                      <span style={{ color: '#6b7280' }}>CPF</span>
+                      <span style={{ fontWeight: '500', color: '#1f2937' }}>{user.cpf}</span>
+                    </div>
+                  )}
+
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '0.875rem'
+                  }}>
+                    <span style={{ color: '#6b7280' }}>Cadastrado em</span>
+                    <span style={{ fontWeight: '500', color: '#1f2937' }}>
+                      {format(parseISO(user.createdAt), 'dd/MM/yyyy', { locale: ptBR })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
+      </div>
 
-        {/* Modal Criar/Editar */}
-        {showModal && (
-          <div className="modal-overlay" onClick={handleModalClose}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
-              <div className="card" style={{ margin: 0 }}>
-                <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-                  <h2 className="font-bold text-xl">
-                    {editingUser ? 'Editar Funcionário' : 'Novo Funcionário'}
-                  </h2>
-                  <button onClick={handleModalClose} className="btn-icon">
-                    <X size={24} />
-                  </button>
+      {showModal && (
+        <div className="modal-overlay" onClick={handleModalClose}>
+          <div className="modal-content" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingUser ? 'Editar Funcionário' : 'Novo Funcionário'}</h2>
+              <button onClick={handleModalClose} className="btn-icon">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="tabs">
+              <button
+                className={`tab ${activeTab === 'info' ? 'active' : ''}`}
+                onClick={() => setActiveTab('info')}
+              >
+                Informações
+              </button>
+              {editingUser && editingUser.role === 'SEMI_ADMIN' && (
+                <button
+                  className={`tab ${activeTab === 'permissions' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('permissions')}
+                >
+                  Permissões
+                </button>
+              )}
+            </div>
+
+            <div className="modal-body">
+              {error && (
+                <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                  <X size={18} />
+                  {error}
                 </div>
+              )}
 
-                {error && <div className="alert alert-danger">{error}</div>}
-                {success && <div className="alert alert-success">{success}</div>}
-
-                {editingUser && formData.role === 'SEMI_ADMIN' && (
-                  <div style={{
-                    display: 'flex',
-                    gap: '1rem',
-                    marginBottom: '1.5rem',
-                    borderBottom: '2px solid #e5e7eb'
-                  }}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('info')}
-                      style={{
-                        padding: '0.75rem 1.5rem',
-                        background: 'none',
-                        border: 'none',
-                        borderBottom: activeTab === 'info' ? '3px solid var(--primary-color)' : '3px solid transparent',
-                        color: activeTab === 'info' ? 'var(--primary-color)' : '#6b7280',
-                        fontWeight: activeTab === 'info' ? '600' : '400',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      📋 Informações
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('permissions')}
-                      style={{
-                        padding: '0.75rem 1.5rem',
-                        background: 'none',
-                        border: 'none',
-                        borderBottom: activeTab === 'permissions' ? '3px solid var(--primary-color)' : '3px solid transparent',
-                        color: activeTab === 'permissions' ? 'var(--primary-color)' : '#6b7280',
-                        fontWeight: activeTab === 'permissions' ? '600' : '400',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                      }}
-                    >
-                      <Shield size={18} />
-                      Permissões
-                    </button>
-                  </div>
-                )}
-
-                {activeTab === 'info' ? (
-                  <form onSubmit={handleSubmit}>
-                    <div className="grid grid-2">
-                      <div className="input-group">
-                        <label htmlFor="firstName">Nome *</label>
-                        <input
-                          type="text"
-                          id="firstName"
-                          name="firstName"
-                          value={formData.firstName}
-                          onChange={handleInputChange}
-                          required
-                          placeholder="João"
-                        />
-                        {fieldErrors.firstName && (
-                          <span className="text-sm text-danger">{fieldErrors.firstName}</span>
-                        )}
-                      </div>
-
-                      <div className="input-group">
-                        <label htmlFor="lastName">Sobrenome *</label>
-                        <input
-                          type="text"
-                          id="lastName"
-                          name="lastName"
-                          value={formData.lastName}
-                          onChange={handleInputChange}
-                          required
-                          placeholder="Silva"
-                        />
-                        {fieldErrors.lastName && (
-                          <span className="text-sm text-danger">{fieldErrors.lastName}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="input-group">
-                      <label htmlFor="email">Email *</label>
+              {activeTab === 'info' ? (
+                <form onSubmit={handleSubmit}>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="firstName">Nome *</label>
                       <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        value={formData.email}
+                        type="text"
+                        id="firstName"
+                        name="firstName"
+                        value={formData.firstName}
                         onChange={handleInputChange}
-                        required
-                        placeholder="usuario@email.com"
+                        className={fieldErrors.firstName ? 'error' : ''}
+                        placeholder="Digite o nome"
                       />
-                      {fieldErrors.email && (
-                        <span className="text-sm text-danger">{fieldErrors.email}</span>
+                      {fieldErrors.firstName && (
+                        <span className="error-message">{fieldErrors.firstName}</span>
                       )}
                     </div>
 
-                    {!editingUser && (
-                      <div className="input-group">
-                        <label htmlFor="password">Senha *</label>
-                        <input
-                          type="password"
-                          id="password"
-                          name="password"
-                          value={formData.password}
-                          onChange={handleInputChange}
-                          required={!editingUser}
-                          placeholder="••••••••"
-                        />
-                        <small className="text-sm text-muted">
-                          Mín. 8 caracteres, maiúsculas, minúsculas, números e especiais
-                        </small>
-                        {fieldErrors.password && (
-                          <span className="text-sm text-danger">{fieldErrors.password}</span>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="grid grid-2">
-                      <div className="input-group">
-                        <label htmlFor="phone">Telefone *</label>
-                        <MaskedInput
-                          mask="phone"
-                          id="phone"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          required
-                          placeholder="(00) 00000-0000"
-                        />
-                        {fieldErrors.phone && (
-                          <span className="text-sm text-danger">{fieldErrors.phone}</span>
-                        )}
-                      </div>
-
-                      <div className="input-group">
-                        <label htmlFor="cpf">CPF (Opcional)</label>
-                        <MaskedInput
-                          mask="cpf"
-                          id="cpf"
-                          name="cpf"
-                          value={formData.cpf}
-                          onChange={handleInputChange}
-                          placeholder="000.000.000-00"
-                        />
-                        {fieldErrors.cpf && (
-                          <span className="text-sm text-danger">{fieldErrors.cpf}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="input-group">
-                      <label htmlFor="role">Função *</label>
-                      <select
-                        id="role"
-                        name="role"
-                        value={formData.role}
+                    <div className="form-group">
+                      <label htmlFor="lastName">Sobrenome *</label>
+                      <input
+                        type="text"
+                        id="lastName"
+                        name="lastName"
+                        value={formData.lastName}
                         onChange={handleInputChange}
-                        required
-                      >
-                        <option value="SEMI_ADMIN">Funcionário</option>
-                        <option value="ADMIN">Administrador</option>
-                      </select>
-                      <small className="text-sm text-muted">
-                        Administradores têm acesso total ao sistema
-                      </small>
-                    </div>
-
-                    {!editingUser && formData.role === 'SEMI_ADMIN' && (
-                      <div style={{
-                        padding: '1rem',
-                        background: '#eff6ff',
-                        borderRadius: '8px',
-                        border: '1px solid #bfdbfe',
-                        marginTop: '1rem'
-                      }}>
-                        <p style={{
-                          margin: 0,
-                          fontSize: '0.875rem',
-                          color: '#1e40af',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem'
-                        }}>
-                          <Shield size={16} />
-                          Este funcionário receberá permissões básicas de visualização automaticamente. Você poderá editar após salvar.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
-                      <button
-                        type="button"
-                        onClick={closeModal}
-                        className="btn btn-outline"
-                        style={{ flex: 1 }}
-                      >
-                        <X size={18} />
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        className="btn btn-primary"
-                        style={{ flex: 1 }}
-                      >
-                        <Check size={18} />
-                        {editingUser ? 'Atualizar' : 'Cadastrar'}
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div>
-                    <PermissionCheckboxes
-                      userId={editingUser?.id}
-                      onPermissionsChange={handlePermissionsChange}
-                    />
-                    
-                    <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
-                      <button
-                        type="button"
-                        onClick={closeModal}
-                        className="btn btn-outline"
-                        style={{ flex: 1 }}
-                      >
-                        <X size={18} />
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => savePermissions(editingUser.id)}
-                        className="btn btn-primary"
-                        style={{ flex: 1 }}
-                      >
-                        <Shield size={18} />
-                        Salvar Permissões
-                      </button>
+                        className={fieldErrors.lastName ? 'error' : ''}
+                        placeholder="Digite o sobrenome"
+                      />
+                      {fieldErrors.lastName && (
+                        <span className="error-message">{fieldErrors.lastName}</span>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Modal Resetar Senha */}
-        {showResetPasswordModal && (
-          <div className="modal-overlay" onClick={closeResetPasswordModal}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
-              <div className="card" style={{ margin: 0 }}>
-                <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-                  <h2 className="font-bold text-xl">Resetar Senha</h2>
-                  <button onClick={closeResetPasswordModal} className="btn-icon">
-                    <X size={24} />
-                  </button>
-                </div>
-
-                {error && <div className="alert alert-danger">{error}</div>}
-
-                <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-dark)', borderRadius: '8px' }}>
-                  <p className="font-bold">
-                    {resetPasswordUser?.firstName} {resetPasswordUser?.lastName}
-                  </p>
-                  <p className="text-sm text-muted">{resetPasswordUser?.email}</p>
-                </div>
-
-                <form onSubmit={handleResetPassword}>
-                  <div className="input-group">
-                    <label htmlFor="newPassword">Nova Senha *</label>
+                  <div className="form-group">
+                    <label htmlFor="email">Email *</label>
                     <input
-                      type="password"
-                      id="newPassword"
-                      name="newPassword"
-                      value={resetPasswordData.newPassword}
-                      onChange={handleResetPasswordInputChange}
-                      required
-                      placeholder="••••••••"
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className={fieldErrors.email ? 'error' : ''}
+                      placeholder="email@exemplo.com"
                     />
+                    {fieldErrors.email && (
+                      <span className="error-message">{fieldErrors.email}</span>
+                    )}
+                  </div>
+
+                  {!editingUser && (
+                    <div className="form-group">
+                      <label htmlFor="password">Senha *</label>
+                      <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        className={fieldErrors.password ? 'error' : ''}
+                        placeholder="Mínimo 8 caracteres"
+                      />
+                      {fieldErrors.password && (
+                        <span className="error-message">{fieldErrors.password}</span>
+                      )}
+                      <small className="text-sm text-muted">
+                        A senha deve conter letras maiúsculas, minúsculas, números e caracteres especiais
+                      </small>
+                    </div>
+                  )}
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="phone">Telefone *</label>
+                      <MaskedInput
+                        mask="(99) 99999-9999"
+                        id="phone"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className={fieldErrors.phone ? 'error' : ''}
+                        placeholder="(00) 00000-0000"
+                      />
+                      {fieldErrors.phone && (
+                        <span className="error-message">{fieldErrors.phone}</span>
+                      )}
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="cpf">CPF</label>
+                      <MaskedInput
+                        mask="999.999.999-99"
+                        id="cpf"
+                        name="cpf"
+                        value={formData.cpf}
+                        onChange={handleInputChange}
+                        className={fieldErrors.cpf ? 'error' : ''}
+                        placeholder="000.000.000-00"
+                      />
+                      {fieldErrors.cpf && (
+                        <span className="error-message">{fieldErrors.cpf}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="role">Cargo *</label>
+                    <select
+                      id="role"
+                      name="role"
+                      value={formData.role}
+                      onChange={handleInputChange}
+                      disabled={editingUser}
+                    >
+                      <option value="SEMI_ADMIN">Funcionário</option>
+                      <option value="ADMIN">Administrador</option>
+                    </select>
                     <small className="text-sm text-muted">
-                      Mínimo 8 caracteres
+                      Administradores têm acesso total ao sistema
                     </small>
                   </div>
 
-                  <div className="input-group">
-                    <label htmlFor="confirmPassword">Confirmar Senha *</label>
-                    <input
-                      type="password"
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      value={resetPasswordData.confirmPassword}
-                      onChange={handleResetPasswordInputChange}
-                      required
-                      placeholder="••••••••"
-                    />
-                  </div>
+                  {!editingUser && formData.role === 'SEMI_ADMIN' && (
+                    <div style={{
+                      padding: '1rem',
+                      background: '#eff6ff',
+                      borderRadius: '8px',
+                      border: '1px solid #bfdbfe',
+                      marginTop: '1rem'
+                    }}>
+                      <p style={{
+                        margin: 0,
+                        fontSize: '0.875rem',
+                        color: '#1e40af',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}>
+                        <Shield size={16} />
+                        Este funcionário receberá permissões básicas de visualização automaticamente
+                      </p>
+                    </div>
+                  )}
 
                   <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
                     <button
                       type="button"
-                      onClick={closeResetPasswordModal}
+                      onClick={closeModal}
                       className="btn btn-outline"
                       style={{ flex: 1 }}
                     >
@@ -1023,16 +782,122 @@ const Users = () => {
                       className="btn btn-primary"
                       style={{ flex: 1 }}
                     >
-                      <Key size={18} />
-                      Resetar Senha
+                      <Check size={18} />
+                      {editingUser ? 'Atualizar' : 'Cadastrar'}
                     </button>
                   </div>
                 </form>
-              </div>
+              ) : (
+                <div>
+                  <PermissionCheckboxes
+                    selectedPermissions={selectedPermissions}
+                    onPermissionsChange={handlePermissionsChange}
+                  />
+
+                  <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="btn btn-outline"
+                      style={{ flex: 1 }}
+                    >
+                      <X size={18} />
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => savePermissions(editingUser.id)}
+                      className="btn btn-primary"
+                      style={{ flex: 1 }}
+                    >
+                      <Check size={18} />
+                      Salvar Permissões
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {showResetPasswordModal && (
+        <div className="modal-overlay" onClick={closeResetPasswordModal}>
+          <div className="modal-content" style={{ maxWidth: '450px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Resetar Senha</h2>
+              <button onClick={closeResetPasswordModal} className="btn-icon">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {error && (
+                <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                  <X size={18} />
+                  {error}
+                </div>
+              )}
+
+              <p style={{ marginBottom: '1.5rem', color: '#6b7280' }}>
+                Resetando senha de: <strong>{resetPasswordUser?.firstName} {resetPasswordUser?.lastName}</strong>
+              </p>
+
+              <form onSubmit={handleResetPassword}>
+                <div className="form-group">
+                  <label htmlFor="newPassword">Nova Senha</label>
+                  <input
+                    type="password"
+                    id="newPassword"
+                    value={resetPasswordData.newPassword}
+                    onChange={(e) => setResetPasswordData(prev => ({
+                      ...prev,
+                      newPassword: e.target.value
+                    }))}
+                    placeholder="Mínimo 8 caracteres"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="confirmPassword">Confirmar Senha</label>
+                  <input
+                    type="password"
+                    id="confirmPassword"
+                    value={resetPasswordData.confirmPassword}
+                    onChange={(e) => setResetPasswordData(prev => ({
+                      ...prev,
+                      confirmPassword: e.target.value
+                    }))}
+                    placeholder="Digite a senha novamente"
+                    required
+                  />
+                </div>
+
+                <div className="flex" style={{ gap: '1rem', marginTop: '1.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={closeResetPasswordModal}
+                    className="btn btn-outline"
+                    style={{ flex: 1 }}
+                  >
+                    <X size={18} />
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                  >
+                    <Key size={18} />
+                    Resetar Senha
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

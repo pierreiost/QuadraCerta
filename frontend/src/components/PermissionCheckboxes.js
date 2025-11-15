@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, ChevronDown, ChevronUp } from 'lucide-react';
+import { Shield, ChevronDown, ChevronUp, AlertCircle, RefreshCw } from 'lucide-react';
 import api from '../services/api';
 
-const PermissionCheckboxes = ({ userId, onPermissionsChange }) => {
+const PermissionCheckboxes = ({ userId, selectedPermissions: initialPermissions, onPermissionsChange }) => {
   const [allPermissions, setAllPermissions] = useState({});
-  const [selectedPermissions, setSelectedPermissions] = useState([]);
+  const [selectedPermissions, setSelectedPermissions] = useState(initialPermissions || []);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [initializing, setInitializing] = useState(false);
   const [expandedModules, setExpandedModules] = useState({});
+
+  useEffect(() => {
+    if (initialPermissions) {
+      setSelectedPermissions(initialPermissions);
+    }
+  }, [initialPermissions]);
 
   useEffect(() => {
     loadPermissions();
@@ -17,10 +25,17 @@ const PermissionCheckboxes = ({ userId, onPermissionsChange }) => {
 
   const loadPermissions = async () => {
     try {
+      setError('');
       const response = await api.get('/permissions');
+      
+      if (!response.data.grouped || Object.keys(response.data.grouped).length === 0) {
+        setError('no_permissions');
+        setLoading(false);
+        return;
+      }
+
       setAllPermissions(response.data.grouped);
       
-      // Expandir todos os módulos por padrão
       const expanded = {};
       Object.keys(response.data.grouped).forEach(module => {
         expanded[module] = true;
@@ -28,6 +43,7 @@ const PermissionCheckboxes = ({ userId, onPermissionsChange }) => {
       setExpandedModules(expanded);
     } catch (error) {
       console.error('Erro ao carregar permissões:', error);
+      setError(error.response?.data?.error || 'Erro ao carregar permissões');
     } finally {
       setLoading(false);
     }
@@ -38,8 +54,25 @@ const PermissionCheckboxes = ({ userId, onPermissionsChange }) => {
       const response = await api.get(`/permissions/user/${userId}`);
       const permIds = response.data.permissionIds || [];
       setSelectedPermissions(permIds);
+      if (onPermissionsChange) {
+        onPermissionsChange(permIds);
+      }
     } catch (error) {
       console.error('Erro ao carregar permissões do usuário:', error);
+    }
+  };
+
+  const initializePermissions = async () => {
+    try {
+      setInitializing(true);
+      setError('');
+      await api.post('/permissions/seed');
+      await loadPermissions();
+    } catch (error) {
+      console.error('Erro ao inicializar permissões:', error);
+      setError(error.response?.data?.error || 'Erro ao inicializar permissões');
+    } finally {
+      setInitializing(false);
     }
   };
 
@@ -49,7 +82,9 @@ const PermissionCheckboxes = ({ userId, onPermissionsChange }) => {
       : [...selectedPermissions, permissionId];
     
     setSelectedPermissions(newSelected);
-    onPermissionsChange(newSelected);
+    if (onPermissionsChange) {
+      onPermissionsChange(newSelected);
+    }
   };
 
   const handleModuleToggle = (module) => {
@@ -60,15 +95,15 @@ const PermissionCheckboxes = ({ userId, onPermissionsChange }) => {
     
     let newSelected;
     if (allSelected) {
-      // Desmarcar todos
       newSelected = selectedPermissions.filter(id => !modulePermIds.includes(id));
     } else {
-      // Marcar todos
       newSelected = [...new Set([...selectedPermissions, ...modulePermIds])];
     }
     
     setSelectedPermissions(newSelected);
-    onPermissionsChange(newSelected);
+    if (onPermissionsChange) {
+      onPermissionsChange(newSelected);
+    }
   };
 
   const toggleModuleExpansion = (module) => {
@@ -126,6 +161,78 @@ const PermissionCheckboxes = ({ userId, onPermissionsChange }) => {
         <p style={{ marginTop: '1rem', color: '#6b7280' }}>
           Carregando permissões...
         </p>
+      </div>
+    );
+  }
+
+  if (error === 'no_permissions') {
+    return (
+      <div style={{
+        background: '#fef2f2',
+        borderRadius: '12px',
+        padding: '2rem',
+        border: '2px solid #fecaca',
+        textAlign: 'center'
+      }}>
+        <AlertCircle size={48} color="#dc2626" style={{ marginBottom: '1rem' }} />
+        <h3 style={{ margin: '0 0 0.5rem 0', color: '#991b1b' }}>
+          Permissões não inicializadas
+        </h3>
+        <p style={{ color: '#7f1d1d', marginBottom: '1.5rem' }}>
+          O sistema de permissões precisa ser inicializado. Clique no botão abaixo para criar as permissões básicas.
+        </p>
+        <button
+          onClick={initializePermissions}
+          disabled={initializing}
+          className="btn btn-primary"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}
+        >
+          {initializing ? (
+            <>
+              <RefreshCw size={18} className="spinning" />
+              Inicializando...
+            </>
+          ) : (
+            <>
+              <Shield size={18} />
+              Inicializar Permissões
+            </>
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        background: '#fef2f2',
+        borderRadius: '12px',
+        padding: '1.5rem',
+        border: '2px solid #fecaca'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#991b1b' }}>
+          <AlertCircle size={20} />
+          <strong>Erro ao carregar permissões</strong>
+        </div>
+        <p style={{ color: '#7f1d1d', margin: '0.5rem 0 0 0' }}>{error}</p>
+      </div>
+    );
+  }
+
+  if (Object.keys(allPermissions).length === 0) {
+    return (
+      <div style={{
+        background: '#f3f4f6',
+        borderRadius: '12px',
+        padding: '2rem',
+        textAlign: 'center'
+      }}>
+        <p style={{ color: '#6b7280' }}>Nenhuma permissão disponível</p>
       </div>
     );
   }

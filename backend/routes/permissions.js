@@ -6,7 +6,6 @@ const { checkPermission } = require('../middleware/permissions');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Listar todas as permissões disponíveis
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const permissions = await prisma.permission.findMany({
@@ -16,7 +15,6 @@ router.get('/', authMiddleware, async (req, res) => {
       ]
     });
 
-    // Agrupar por módulo
     const grouped = permissions.reduce((acc, perm) => {
       if (!acc[perm.module]) {
         acc[perm.module] = [];
@@ -35,10 +33,81 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Obter permissões de um usuário específico
+router.post('/seed', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Sem permissão' });
+    }
+
+    const existingCount = await prisma.permission.count();
+    
+    if (existingCount > 0) {
+      return res.json({ 
+        message: 'Permissões já existem no banco', 
+        count: existingCount 
+      });
+    }
+
+    const permissions = [
+      { module: 'products', action: 'view', name: 'Visualizar Produtos', description: 'Permite visualizar lista de produtos' },
+      { module: 'products', action: 'create', name: 'Criar Produtos', description: 'Permite cadastrar novos produtos' },
+      { module: 'products', action: 'edit', name: 'Editar Produtos', description: 'Permite editar dados de produtos' },
+      { module: 'products', action: 'delete', name: 'Excluir Produtos', description: 'Permite excluir produtos do sistema' },
+      { module: 'products', action: 'stock', name: 'Gerenciar Estoque', description: 'Permite adicionar e remover itens do estoque' },
+      
+      { module: 'clients', action: 'view', name: 'Visualizar Clientes', description: 'Permite visualizar lista de clientes' },
+      { module: 'clients', action: 'create', name: 'Criar Clientes', description: 'Permite cadastrar novos clientes' },
+      { module: 'clients', action: 'edit', name: 'Editar Clientes', description: 'Permite editar dados de clientes' },
+      { module: 'clients', action: 'delete', name: 'Excluir Clientes', description: 'Permite excluir clientes do sistema' },
+      
+      { module: 'tabs', action: 'view', name: 'Visualizar Comandas', description: 'Permite visualizar comandas' },
+      { module: 'tabs', action: 'create', name: 'Criar Comandas', description: 'Permite abrir novas comandas' },
+      { module: 'tabs', action: 'edit', name: 'Editar Comandas', description: 'Permite adicionar itens às comandas' },
+      { module: 'tabs', action: 'close', name: 'Fechar Comandas', description: 'Permite fechar comandas' },
+      { module: 'tabs', action: 'cancel', name: 'Cancelar Comandas', description: 'Permite cancelar comandas' },
+      
+      { module: 'courts', action: 'view', name: 'Visualizar Quadras', description: 'Permite visualizar lista de quadras' },
+      { module: 'courts', action: 'create', name: 'Criar Quadras', description: 'Permite cadastrar novas quadras' },
+      { module: 'courts', action: 'edit', name: 'Editar Quadras', description: 'Permite editar dados de quadras' },
+      { module: 'courts', action: 'delete', name: 'Excluir Quadras', description: 'Permite excluir quadras do sistema' },
+      
+      { module: 'reservations', action: 'view', name: 'Visualizar Reservas', description: 'Permite visualizar reservas' },
+      { module: 'reservations', action: 'create', name: 'Criar Reservas', description: 'Permite criar novas reservas' },
+      { module: 'reservations', action: 'edit', name: 'Editar Reservas', description: 'Permite editar reservas' },
+      { module: 'reservations', action: 'cancel', name: 'Cancelar Reservas', description: 'Permite cancelar reservas' },
+      
+      { module: 'users', action: 'view', name: 'Visualizar Usuários', description: 'Permite visualizar lista de funcionários' },
+      { module: 'users', action: 'create', name: 'Criar Usuários', description: 'Permite cadastrar novos funcionários' },
+      { module: 'users', action: 'edit', name: 'Editar Usuários', description: 'Permite editar dados de funcionários' },
+      { module: 'users', action: 'delete', name: 'Excluir Usuários', description: 'Permite excluir funcionários do sistema' },
+      
+      { module: 'dashboard', action: 'view', name: 'Visualizar Dashboard', description: 'Permite acessar o painel principal' },
+      
+      { module: 'notifications', action: 'view', name: 'Visualizar Notificações', description: 'Permite acessar central de notificações' },
+    ];
+
+    for (const permission of permissions) {
+      await prisma.permission.upsert({
+        where: { module_action: { module: permission.module, action: permission.action } },
+        update: {},
+        create: permission,
+      });
+    }
+
+    const count = await prisma.permission.count();
+
+    res.json({ 
+      message: 'Permissões inicializadas com sucesso', 
+      count 
+    });
+  } catch (error) {
+    console.error('Erro ao inicializar permissões:', error);
+    res.status(500).json({ error: 'Erro ao inicializar permissões' });
+  }
+});
+
 router.get('/user/:userId', authMiddleware, async (req, res) => {
   try {
-    // Apenas ADMIN pode ver permissões de outros usuários
     if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN' && req.user.userId !== req.params.userId) {
       return res.status(403).json({ error: 'Sem permissão para visualizar' });
     }
@@ -78,10 +147,8 @@ router.get('/user/:userId', authMiddleware, async (req, res) => {
   }
 });
 
-// Atualizar permissões de um usuário
 router.put('/user/:userId', authMiddleware, async (req, res) => {
   try {
-    // Apenas ADMIN pode alterar permissões
     if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
       return res.status(403).json({ error: 'Sem permissão para alterar permissões' });
     }
@@ -100,19 +167,16 @@ router.put('/user/:userId', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    // Não permite alterar permissões de ADMIN ou SUPER_ADMIN
     if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
       return res.status(400).json({ 
         error: 'Administradores têm todas as permissões automaticamente' 
       });
     }
 
-    // Remover permissões antigas
     await prisma.userPermission.deleteMany({
       where: { userId: req.params.userId }
     });
 
-    // Adicionar novas permissões
     if (permissionIds.length > 0) {
       await prisma.userPermission.createMany({
         data: permissionIds.map(permissionId => ({
@@ -122,7 +186,6 @@ router.put('/user/:userId', authMiddleware, async (req, res) => {
       });
     }
 
-    // Buscar permissões atualizadas
     const updatedPermissions = await prisma.userPermission.findMany({
       where: { userId: req.params.userId },
       include: {
@@ -145,12 +208,10 @@ router.put('/user/:userId', authMiddleware, async (req, res) => {
   }
 });
 
-// Verificar se usuário tem permissão específica
 router.post('/check', authMiddleware, async (req, res) => {
   try {
     const { module, action } = req.body;
 
-    // ADMIN e SUPER_ADMIN sempre têm permissão
     if (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN') {
       return res.json({ hasPermission: true });
     }
