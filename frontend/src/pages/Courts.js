@@ -186,21 +186,42 @@ const Courts = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta quadra?')) {
-      return;
-    }
+const handleDelete = async (id) => {
+  const court = courts.find(c => c.id === id);
+  const courtName = court ? court.name : 'esta quadra';
+  
+  if (!window.confirm(`Tem certeza que deseja excluir a quadra "${courtName}"?`)) {
+    return;
+  }
 
-    try {
-      await courtService.delete(id);
-      setSuccess('Quadra excluída com sucesso!');
-      loadCourts();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (error) {
-      setError(error.response?.data?.error || 'Erro ao excluir quadra');
-      setTimeout(() => setError(''), 3000);
+  try {
+    await courtService.delete(id);
+    setSuccess('Quadra excluída com sucesso!');
+    loadCourts();
+    setTimeout(() => setSuccess(''), 3000);
+  } catch (error) {
+    console.error('Erro ao excluir quadra:', error);
+    
+    if (error.response?.status === 409) {
+      const activeCount = error.response?.data?.activeReservations;
+      
+      if (activeCount) {
+        setError(
+          `⚠️ Não é possível excluir a quadra "${courtName}".\n\n` +
+          `Existem ${activeCount} reserva${activeCount > 1 ? 's' : ''} ativa${activeCount > 1 ? 's' : ''} agendada${activeCount > 1 ? 's' : ''} para esta quadra.\n\n` +
+          `Por favor, cancele todas as reservas futuras antes de excluir a quadra.`
+        );
+      } else {
+        setError(error.response?.data?.error || 'Esta quadra possui reservas ativas e não pode ser excluída.');
+      }
+      
+      setTimeout(() => setError(''), 7000);
+    } else {
+      setError(error.response?.data?.error || 'Erro ao excluir quadra. Tente novamente.');
+      setTimeout(() => setError(''), 4000);
     }
-  };
+  }
+};
 
   const handleCreateType = async (e) => {
     e.preventDefault();

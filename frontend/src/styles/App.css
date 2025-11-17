@@ -703,4 +703,9 @@ tr:hover {
       transform: rotate(360deg);
     }
   }
+
+  .alert {
+  white-space: pre-line;
+  line-height: 1.6;
+}
 }

@@ -87,6 +87,24 @@ router.put('/:id', authMiddleware, checkPermission('products', 'edit'), async (r
       return res.status(404).json({ error: 'Produto não encontrado.' });
     }
 
+    const priceChanged = price && parseFloat(price) !== product.price;
+
+    if (priceChanged) {
+      const productInOpenTabs = await prisma.tabItem.count({
+        where: {
+          productId: req.params.id,
+          tab: { status: 'OPEN' }
+        }
+      });
+
+      if (productInOpenTabs > 0) {
+        return res.status(400).json({
+          error: 'Não é possível alterar o preço de produto que está em comandas abertas',
+          openTabs: productInOpenTabs
+        });
+      }
+    }
+
     const updatedProduct = await prisma.product.update({
       where: { id: req.params.id },
       data: {
@@ -222,6 +240,28 @@ router.post('/:id/stock/remove', authMiddleware, checkPermission('products', 'st
 
     if (product.stock < parseInt(quantity)) {
       return res.status(400).json({ error: 'Estoque insuficiente.' });
+    }
+
+    const productInOpenTabs = await prisma.tabItem.findMany({
+      where: {
+        productId: req.params.id,
+        tab: { status: 'OPEN' }
+      },
+      include: {
+        tab: {
+          include: {
+            client: true
+          }
+        }
+      }
+    });
+
+    if (productInOpenTabs.length > 0) {
+      return res.status(400).json({
+        error: 'Não é possível remover estoque de produto que está em comandas abertas',
+        openTabs: productInOpenTabs.length,
+        details: 'Feche as comandas antes de ajustar o estoque deste produto'
+      });
     }
 
     const updatedProduct = await prisma.product.update({

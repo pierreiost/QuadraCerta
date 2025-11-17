@@ -108,86 +108,69 @@ router.post('/', authMiddleware, checkPermission('reservations', 'create'), rese
         error: 'Duração inválida. Deve ser entre 0.5 e 12 horas' 
       });
     }
-    
+
     const durationInMilliseconds = duration * 60 * 60 * 1000;
     const end = new Date(start.getTime() + durationInMilliseconds);
 
-    const now = new Date();
-    
-    if (start < now) {
-      return res.status(400).json({ 
-        error: 'Não é possível criar reservas em datas ou horários que já passaram'
-      });
-    }
-    
     if (isRecurring) {
-      if (!endDate) {
+      if (!frequency || !endDate) {
         return res.status(400).json({ 
-          error: 'Data final é obrigatória para reservas recorrentes' 
-        });
-      }
-
-      const finalEndDate = new Date(endDate);
-      
-      if (finalEndDate < now) {
-        return res.status(400).json({ 
-          error: 'A data final das reservas recorrentes não pode estar no passado' 
+          error: 'Frequência e data final são obrigatórias para reservas recorrentes' 
         });
       }
 
       const recurringGroup = await prisma.recurringGroup.create({
         data: {
-          frequency: frequency || 'WEEKLY',
-          dayOfWeek: dayOfWeek !== undefined ? parseInt(dayOfWeek) : start.getDay(),
+          frequency,
+          dayOfWeek: frequency === 'WEEKLY' ? start.getDay() : null,
           startDate: start,
-          endDate: finalEndDate
+          endDate: new Date(endDate)
         }
       });
 
       const reservations = [];
       let currentDate = new Date(start);
-      const maxDate = new Date(start.getTime() + (365 * 24 * 60 * 60 * 1000));
-      const limitDate = finalEndDate < maxDate ? finalEndDate : maxDate;
+      const finalDate = new Date(endDate);
 
-      while (currentDate <= limitDate) {
-        if (currentDate >= now) {
-          const currentEnd = new Date(currentDate.getTime() + durationInMilliseconds);
+      while (currentDate <= finalDate) {
+        const reservationStart = new Date(currentDate);
+        const reservationEnd = new Date(currentDate.getTime() + durationInMilliseconds);
 
-          const conflict = await prisma.reservation.findFirst({
-            where: {
-              courtId,
-              status: { not: 'CANCELLED' },
-              OR: [
-                { AND: [{ startTime: { lte: currentDate } }, { endTime: { gt: currentDate } }] },
-                { AND: [{ startTime: { lt: currentEnd } }, { endTime: { gte: currentEnd } }] },
-                { AND: [{ startTime: { gte: currentDate } }, { endTime: { lte: currentEnd } }] }
-              ]
-            }
-          });
-
-          if (!conflict) {
-            reservations.push({
-              courtId,
-              clientId,
-              startTime: new Date(currentDate),
-              endTime: currentEnd,
-              isRecurring: true,
-              recurringGroupId: recurringGroup.id,
-              status: 'CONFIRMED'
-            });
+        const conflict = await prisma.reservation.findFirst({
+          where: {
+            courtId,
+            status: { not: 'CANCELLED' },
+            OR: [
+              { AND: [{ startTime: { lte: reservationStart } }, { endTime: { gt: reservationStart } }] },
+              { AND: [{ startTime: { lt: reservationEnd } }, { endTime: { gte: reservationEnd } }] },
+              { AND: [{ startTime: { gte: reservationStart } }, { endTime: { lte: reservationEnd } }] }
+            ]
           }
+        });
+
+        if (!conflict) {
+          reservations.push({
+            courtId,
+            clientId,
+            startTime: reservationStart,
+            endTime: reservationEnd,
+            isRecurring: true,
+            recurringGroupId: recurringGroup.id,
+            status: 'CONFIRMED'
+          });
         }
 
-        if (frequency === 'MONTHLY') {
+        if (frequency === 'WEEKLY') {
+          currentDate.setDate(currentDate.getDate() + 7);
+        } else if (frequency === 'MONTHLY') {
           currentDate.setMonth(currentDate.getMonth() + 1);
-        } else {
-          currentDate = new Date(currentDate.getTime() + (7 * 24 * 60 * 60 * 1000));
         }
       }
 
       if (reservations.length === 0) {
-        return res.status(400).json({ 
-          error: 'Não foi possível criar nenhuma reserva. Todos os horários estão ocupados' 
+        await prisma.recurringGroup.delete({ where: { id: recurringGroup.id } });
+        return res.status(409).json({ 
+          error: 'Todos os horários estão ocupados' 
         });
       }
 
@@ -257,6 +240,9 @@ router.put('/:id', authMiddleware, checkPermission('reservations', 'edit'), vali
       where: {
         id: req.params.id,
         court: { complexId: req.user.complexId }
+      },
+      include: {
+        tabs: { where: { status: 'OPEN' } }
       }
     });
 
@@ -269,11 +255,24 @@ router.put('/:id', authMiddleware, checkPermission('reservations', 'edit'), vali
         error: 'Não é possível editar uma reserva cancelada' 
       });
     }
+
+    const now = new Date();
+
+    if (reservation.startTime < now) {
+      return res.status(400).json({
+        error: 'Não é possível editar reserva que já começou'
+      });
+    }
+
+    if (reservation.tabs && reservation.tabs.length > 0) {
+      return res.status(400).json({
+        error: 'Não é possível editar reserva com comanda aberta. Feche a comanda primeiro.',
+        openTabs: reservation.tabs.length
+      });
+    }
     
     let newStartTime = startTime ? new Date(startTime) : reservation.startTime;
     let newEndTime = reservation.endTime;
-
-    const now = new Date();
 
     if (startTime && newStartTime < now) {
       return res.status(400).json({ 
