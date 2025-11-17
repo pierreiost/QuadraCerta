@@ -160,8 +160,8 @@ const Login = () => {
                 src={logo}
                 alt="QuadraCerta"
                 style={{
-                  width: '120px',
-                  height: '120px',
+                  width: '300px',
+                  height: '300px',
                   marginBottom: '30px',
                   opacity: 0.95
                 }}
