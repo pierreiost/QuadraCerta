@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
+import MaskedInput from '../components/MaskedInput';
 import { reservationService, courtService, clientService } from '../services/api';
 import { 
   Trash2, 
@@ -11,10 +12,13 @@ import {
   MapPin, 
   RefreshCw,
   Filter,
-  Info,
   CheckCircle,
-  Users,
-  Edit3
+  CheckSquare,
+  Square,
+  UserPlus,
+  Phone,
+  Mail,
+  FileText
 } from 'lucide-react';
 import { format, addHours, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -29,6 +33,19 @@ const Reservations = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('CONFIRMED');
   const [useCustomTime, setUseCustomTime] = useState(false);
+  const [selectedReservations, setSelectedReservations] = useState([]);
+  
+  // Estados para cadastro rápido de cliente
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [clientFormData, setClientFormData] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    cpf: ''
+  });
+  const [clientError, setClientError] = useState('');
+  const [clientSuccess, setClientSuccess] = useState('');
+  const [savingClient, setSavingClient] = useState(false);
   
   const [formData, setFormData] = useState({
     courtId: '',
@@ -100,6 +117,75 @@ const Reservations = () => {
     });
   };
 
+  const handleClientInputChange = (e) => {
+    const { name, value } = e.target;
+    setClientFormData({
+      ...clientFormData,
+      [name]: value
+    });
+    if (clientError) setClientError('');
+  };
+
+  const openClientModal = () => {
+    setShowClientModal(true);
+    setClientFormData({
+      fullName: '',
+      phone: '',
+      email: '',
+      cpf: ''
+    });
+    setClientError('');
+    setClientSuccess('');
+  };
+
+  const closeClientModal = () => {
+    if (savingClient) return;
+    setShowClientModal(false);
+    setClientFormData({
+      fullName: '',
+      phone: '',
+      email: '',
+      cpf: ''
+    });
+    setClientError('');
+    setClientSuccess('');
+  };
+
+  const handleSaveClient = async (e) => {
+    e.preventDefault();
+    setClientError('');
+    
+    if (!clientFormData.fullName || !clientFormData.phone) {
+      setClientError('Nome completo e telefone são obrigatórios');
+      return;
+    }
+
+    setSavingClient(true);
+
+    try {
+      const response = await clientService.create(clientFormData);
+      const newClient = response.data;
+      
+      setClients(prev => [...prev, newClient]);
+      setFormData(prev => ({
+        ...prev,
+        clientId: newClient.id
+      }));
+      
+      setClientSuccess('Cliente cadastrado com sucesso!');
+      
+      setTimeout(() => {
+        closeClientModal();
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Erro ao cadastrar cliente:', error);
+      setClientError(error.response?.data?.error || 'Erro ao cadastrar cliente. Tente novamente.');
+    } finally {
+      setSavingClient(false);
+    }
+  };
+
   const validateTime = (time) => {
     if (!time) return false;
     
@@ -147,13 +233,22 @@ const Reservations = () => {
       return;
     }
 
+    // Validar se o horário já passou
+    const dateTimeString = `${formData.date}T${finalTime}`;
+    const reservationDateTime = new Date(dateTimeString);
+    const now = new Date();
+
+    if (reservationDateTime <= now) {
+      setError('Não é possível criar reserva para um horário que já passou');
+      return;
+    }
+
     if (!formData.durationInHours || formData.durationInHours < 1) {
       setError('A duração deve ser de pelo menos 1 hora');
       return;
     }
 
     try {
-      const dateTimeString = `${formData.date}T${finalTime}`;
       const startDateTime = new Date(dateTimeString);
       const duration = parseFloat(formData.durationInHours);
       const endDateTime = addHours(startDateTime, duration);
@@ -187,7 +282,7 @@ const Reservations = () => {
   };
 
   const handleCancel = async (id) => {
-    if (!window.confirm('Tem certeza que deseja cancelar esta reserva?')) {
+    if (!window.confirm('Deseja cancelar esta reserva?')) {
       return;
     }
 
@@ -203,7 +298,7 @@ const Reservations = () => {
   };
 
   const handleCancelRecurringGroup = async (groupId) => {
-    if (!window.confirm('Tem certeza que deseja cancelar todas as reservas recorrentes deste grupo?')) {
+    if (!window.confirm('Deseja cancelar todas as reservas futuras deste grupo?')) {
       return;
     }
 
@@ -215,6 +310,49 @@ const Reservations = () => {
     } catch (error) {
       setError(error.response?.data?.error || 'Erro ao cancelar grupo de reservas');
       setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  const handleCancelMultiple = async () => {
+    if (selectedReservations.length === 0) {
+      setError('Selecione ao menos uma reserva');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    if (!window.confirm(`Deseja cancelar ${selectedReservations.length} reserva(s) selecionada(s)?`)) {
+      return;
+    }
+
+    try {
+      await reservationService.cancelMultiple(selectedReservations);
+      setSuccess(`${selectedReservations.length} reserva(s) cancelada(s) com sucesso!`);
+      setSelectedReservations([]);
+      loadData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.error || 'Erro ao cancelar reservas');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  const toggleSelectReservation = (id) => {
+    setSelectedReservations(prev => 
+      prev.includes(id) 
+        ? prev.filter(resId => resId !== id)
+        : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const activeReservations = filteredReservations
+      .filter(r => r.status !== 'CANCELLED')
+      .map(r => r.id);
+    
+    if (selectedReservations.length === activeReservations.length) {
+      setSelectedReservations([]);
+    } else {
+      setSelectedReservations(activeReservations);
     }
   };
 
@@ -305,6 +443,7 @@ const Reservations = () => {
   }
 
   const filteredReservations = getFilteredReservations();
+  const activeReservationsCount = filteredReservations.filter(r => r.status !== 'CANCELLED').length;
 
   return (
     <>
@@ -319,7 +458,7 @@ const Reservations = () => {
           border: '1px solid var(--border-color)',
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
         }}>
-          <div className="flex-between" style={{ alignItems: 'flex-start' }}>
+          <div className="flex-between" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
                 <div style={{
@@ -335,32 +474,31 @@ const Reservations = () => {
                   <Calendar size={26} />
                 </div>
                 <div>
-                  <h1 className="font-bold text-2xl" style={{ marginBottom: '0.25rem' }}>Reservas</h1>
-                  <p className="text-muted">Gerencie os horários agendados nas quadras</p>
+                  <h1 style={{ 
+                    fontSize: '1.75rem', 
+                    fontWeight: '700',
+                    color: 'var(--text-primary)',
+                    marginBottom: '0.25rem'
+                  }}>
+                    Gestão de Reservas
+                  </h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    {filteredReservations.length} {filteredReservations.length === 1 ? 'reserva encontrada' : 'reservas encontradas'}
+                  </p>
                 </div>
               </div>
             </div>
+
             <button 
-              className="btn btn-primary" 
+              className="btn btn-primary"
               onClick={openModal}
               style={{
-                padding: '1rem 1.5rem',
-                borderRadius: '12px',
-                fontSize: '1rem',
-                fontWeight: '600',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                boxShadow: '0 4px 12px rgba(52, 168, 83, 0.3)',
-                transition: 'all 0.3s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 6px 16px rgba(52, 168, 83, 0.4)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 4px 12px rgba(52, 168, 83, 0.3)';
+                padding: '0.875rem 1.5rem',
+                fontSize: '0.95rem',
+                borderRadius: '10px'
               }}
             >
               <PlusCircle size={20} />
@@ -370,195 +508,269 @@ const Reservations = () => {
         </div>
 
         {success && (
-          <div className="alert alert-success" style={{ marginBottom: '1.5rem' }}>
-            {success}
+          <div style={{
+            background: '#d4edda',
+            border: '1px solid #c3e6cb',
+            borderRadius: '12px',
+            padding: '1rem 1.5rem',
+            marginBottom: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            color: '#155724'
+          }}>
+            <CheckCircle size={20} />
+            <span>{success}</span>
           </div>
         )}
 
         {error && !showModal && (
-          <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
-            {error}
+          <div style={{
+            background: '#f8d7da',
+            border: '1px solid #f5c6cb',
+            borderRadius: '12px',
+            padding: '1rem 1.5rem',
+            marginBottom: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            color: '#721c24'
+          }}>
+            <X size={20} />
+            <span>{error}</span>
           </div>
         )}
 
-        <div className="card" style={{ marginBottom: '2rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-          <div style={{ 
-            padding: '1.5rem',
-            borderBottom: '1px solid var(--border-color)',
-            background: 'var(--bg-light)'
+        <div style={{ 
+          background: 'white',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          marginBottom: '2rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+          border: '1px solid var(--border-color)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            marginBottom: '1.5rem'
           }}>
-            <h3 style={{ 
-              fontWeight: '600', 
-              fontSize: '1.1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
+            <Filter size={20} style={{ color: '#34a853' }} />
+            <h3 style={{
+              margin: 0,
+              fontSize: '1.125rem',
+              fontWeight: '600',
               color: 'var(--text-primary)'
             }}>
-              <Filter size={20} style={{ color: '#34a853' }} />
               Filtrar Reservas
             </h3>
           </div>
 
-          <div style={{ padding: '1.5rem' }}>
-            <div className="grid grid-4" style={{ gap: '1.25rem' }}>
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label 
-                  htmlFor="filterCourt"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '0.75rem',
-                    fontWeight: '600',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <MapPin size={16} style={{ color: '#34a853' }} />
-                  Quadra
-                </label>
-                <select
-                  id="filterCourt"
-                  value={selectedCourt}
-                  onChange={(e) => setSelectedCourt(e.target.value)}
-                  style={{
-                    padding: '0.875rem',
-                    borderRadius: '10px',
-                    border: '2px solid var(--border-color)',
-                    fontSize: '0.95rem',
-                    transition: 'all 0.2s',
-                    background: 'white'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                >
-                  <option value="">Todas as quadras</option>
-                  {courts.map((court) => (
-                    <option key={court.id} value={court.id}>
-                      {court.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label 
-                  htmlFor="filterDate"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '0.75rem',
-                    fontWeight: '600',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <Calendar size={16} style={{ color: '#34a853' }} />
-                  Data
-                </label>
-                <input
-                  type="date"
-                  id="filterDate"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  style={{
-                    padding: '0.875rem',
-                    borderRadius: '10px',
-                    border: '2px solid var(--border-color)',
-                    fontSize: '0.95rem',
-                    transition: 'all 0.2s',
-                    background: 'white'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                />
-              </div>
-
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label 
-                  htmlFor="filterStatus"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '0.75rem',
-                    fontWeight: '600',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <CheckCircle size={16} style={{ color: '#34a853' }} />
-                  Status
-                </label>
-                <select
-                  id="filterStatus"
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  style={{
-                    padding: '0.875rem',
-                    borderRadius: '10px',
-                    border: '2px solid var(--border-color)',
-                    fontSize: '0.95rem',
-                    transition: 'all 0.2s',
-                    background: 'white'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                >
-                  <option value="">Todos os status</option>
-                  <option value="CONFIRMED">Confirmadas</option>
-                  <option value="PENDING">Pendentes</option>
-                  <option value="CANCELLED">Canceladas</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button
-                  className="btn btn-outline"
-                  onClick={() => {
-                    setSelectedCourt('');
-                    setSelectedDate('');
-                    setSelectedStatus('CONFIRMED');
-                  }}
-                  style={{ 
-                    width: '100%',
-                    padding: '0.875rem',
-                    borderRadius: '10px',
-                    fontWeight: '600',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.5rem',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  <RefreshCw size={18} />
-                  Limpar Filtros
-                </button>
-              </div>
-            </div>
-
-            {(selectedCourt || selectedDate || selectedStatus !== 'CONFIRMED') && (
-              <div style={{
-                marginTop: '1rem',
-                padding: '0.875rem',
-                background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
-                borderRadius: '10px',
+          <div style={{ 
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '1.25rem'
+          }}>
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="filterCourt" style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.75rem',
-                border: '1px solid #bbf7d0'
+                gap: '0.5rem',
+                marginBottom: '0.75rem',
+                fontWeight: '600',
+                color: 'var(--text-primary)'
               }}>
-                <Info size={18} style={{ color: '#34a853', flexShrink: 0 }} />
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                  <strong>Filtros ativos:</strong> 
-                  {selectedCourt && ` Quadra específica`}
-                  {selectedDate && ` • Data selecionada`}
-                  {selectedStatus !== 'CONFIRMED' && ` • Status: ${selectedStatus === 'CANCELLED' ? 'Canceladas' : selectedStatus === 'PENDING' ? 'Pendentes' : 'Todos'}`}
-                </span>
-              </div>
+                <MapPin size={16} style={{ color: '#34a853' }} />
+                Quadra
+              </label>
+              <select
+                id="filterCourt"
+                value={selectedCourt}
+                onChange={(e) => setSelectedCourt(e.target.value)}
+                style={{
+                  padding: '0.875rem',
+                  borderRadius: '10px',
+                  border: '2px solid var(--border-color)',
+                  fontSize: '0.95rem',
+                  transition: 'all 0.2s',
+                  background: 'white',
+                  width: '100%'
+                }}
+              >
+                <option value="">Todas as quadras</option>
+                {courts.map((court) => (
+                  <option key={court.id} value={court.id}>
+                    {court.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="filterDate" style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.75rem',
+                fontWeight: '600',
+                color: 'var(--text-primary)'
+              }}>
+                <Calendar size={16} style={{ color: '#34a853' }} />
+                Data
+              </label>
+              <input
+                type="date"
+                id="filterDate"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                style={{
+                  padding: '0.875rem',
+                  borderRadius: '10px',
+                  border: '2px solid var(--border-color)',
+                  fontSize: '0.95rem',
+                  transition: 'all 0.2s',
+                  width: '100%'
+                }}
+              />
+            </div>
+
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="filterStatus" style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.75rem',
+                fontWeight: '600',
+                color: 'var(--text-primary)'
+              }}>
+                <CheckCircle size={16} style={{ color: '#34a853' }} />
+                Status
+              </label>
+              <select
+                id="filterStatus"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                style={{
+                  padding: '0.875rem',
+                  borderRadius: '10px',
+                  border: '2px solid var(--border-color)',
+                  fontSize: '0.95rem',
+                  transition: 'all 0.2s',
+                  background: 'white',
+                  width: '100%'
+                }}
+              >
+                <option value="">Todos os status</option>
+                <option value="CONFIRMED">Confirmadas</option>
+                <option value="PENDING">Pendentes</option>
+                <option value="CANCELLED">Canceladas</option>
+              </select>
+            </div>
+          </div>
+
+          {(selectedCourt || selectedDate || selectedStatus) && (
+            <button
+              onClick={() => {
+                setSelectedCourt('');
+                setSelectedDate('');
+                setSelectedStatus('CONFIRMED');
+              }}
+              style={{
+                marginTop: '1rem',
+                padding: '0.625rem 1.25rem',
+                background: 'transparent',
+                border: '2px solid #34a853',
+                color: '#34a853',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '0.9rem',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = '#34a853';
+                e.target.style.color = 'white';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = 'transparent';
+                e.target.style.color = '#34a853';
+              }}
+            >
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        {activeReservationsCount > 0 && (
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '1rem 1.5rem',
+            marginBottom: '1.5rem',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+            border: '1px solid var(--border-color)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem'
+          }}>
+            <button
+              onClick={toggleSelectAll}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.625rem 1.25rem',
+                background: 'transparent',
+                border: '2px solid #34a853',
+                color: '#34a853',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '0.9rem',
+                transition: 'all 0.2s'
+              }}
+            >
+              {selectedReservations.length === activeReservationsCount ? (
+                <>
+                  <CheckSquare size={18} />
+                  Desmarcar Todas
+                </>
+              ) : (
+                <>
+                  <Square size={18} />
+                  Selecionar Todas
+                </>
+              )}
+            </button>
+
+            {selectedReservations.length > 0 && (
+              <button
+                onClick={handleCancelMultiple}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.625rem 1.25rem',
+                  background: '#ea4335',
+                  border: 'none',
+                  color: 'white',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.9rem',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => e.target.style.background = '#d33426'}
+                onMouseOut={(e) => e.target.style.background = '#ea4335'}
+              >
+                <Trash2 size={18} />
+                Cancelar Selecionadas ({selectedReservations.length})
+              </button>
             )}
           </div>
-        </div>
+        )}
 
         <div style={{
           display: 'grid',
@@ -577,7 +789,7 @@ const Reservations = () => {
                 color: '#dadce0',
                 marginBottom: '1rem'
               }} />
-              <p>Nenhuma reserva encontrada com os filtros aplicados</p>
+              <p>Nenhuma reserva encontrada</p>
             </div>
           ) : (
             filteredReservations.map(reservation => (
@@ -590,77 +802,111 @@ const Reservations = () => {
                   padding: '1.5rem',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
+                  alignItems: 'center',
                   gap: '1rem',
                   flexWrap: 'wrap',
                   transition: 'all 0.2s ease',
-                  border: '1px solid #f1f3f4'
+                  border: selectedReservations.includes(reservation.id) 
+                    ? '2px solid #34a853' 
+                    : '1px solid #f1f3f4',
+                  opacity: reservation.status === 'CANCELLED' ? 0.6 : 1
                 }}
               >
-                <div style={{ flex: 1, minWidth: '250px' }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    marginBottom: '1rem'
-                  }}>
-                    <MapPin size={20} style={{ color: '#34a853' }} />
-                    <h3 style={{
-                      margin: 0,
-                      fontSize: '1.125rem',
-                      fontWeight: '600',
-                      color: '#202124'
-                    }}>
-                      {getCourtName(reservation.courtId)}
-                    </h3>
-                    {reservation.isRecurring && (
-                      <RefreshCw size={16} style={{ color: '#fbbc04' }} />
-                    )}
-                  </div>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  gap: '1.5rem',
+                  flex: 1,
+                  minWidth: '250px'
+                }}>
+                  {reservation.status !== 'CANCELLED' && (
+                    <button
+                      onClick={() => toggleSelectReservation(reservation.id)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: selectedReservations.includes(reservation.id) ? '#34a853' : '#5f6368',
+                        transition: 'color 0.2s'
+                      }}
+                    >
+                      {selectedReservations.includes(reservation.id) ? (
+                        <CheckSquare size={24} />
+                      ) : (
+                        <Square size={24} />
+                      )}
+                    </button>
+                  )}
 
-                  <div style={{
-                    display: 'grid',
-                    gap: '0.5rem'
-                  }}>
+                  <div style={{ flex: 1 }}>
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.5rem',
-                      fontSize: '0.875rem',
-                      color: '#5f6368'
+                      gap: '0.75rem',
+                      marginBottom: '1rem'
                     }}>
-                      <User size={16} />
-                      <span>{getClientName(reservation.clientId)}</span>
+                      <MapPin size={20} style={{ color: '#34a853' }} />
+                      <h3 style={{
+                        margin: 0,
+                        fontSize: '1.125rem',
+                        fontWeight: '600',
+                        color: '#202124'
+                      }}>
+                        {getCourtName(reservation.courtId)}
+                      </h3>
+                      {reservation.isRecurring && (
+                        <RefreshCw size={16} style={{ color: '#fbbc04' }} />
+                      )}
                     </div>
 
                     <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      fontSize: '0.875rem',
-                      color: '#5f6368'
+                      display: 'grid',
+                      gap: '0.5rem'
                     }}>
-                      <Calendar size={16} />
-                      <span>
-                        {format(parseISO(reservation.startTime), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                      </span>
-                    </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: '0.875rem',
+                        color: '#5f6368'
+                      }}>
+                        <User size={16} />
+                        <span>{getClientName(reservation.clientId)}</span>
+                      </div>
 
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      fontSize: '0.875rem',
-                      color: '#5f6368'
-                    }}>
-                      <Clock size={16} />
-                      <span>
-                        {format(parseISO(reservation.startTime), 'HH:mm')} - {format(parseISO(reservation.endTime), 'HH:mm')}
-                      </span>
-                    </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: '0.875rem',
+                        color: '#5f6368'
+                      }}>
+                        <Calendar size={16} />
+                        <span>
+                          {format(parseISO(reservation.startTime), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                        </span>
+                      </div>
 
-                    <div style={{ marginTop: '0.5rem' }}>
-                      {getStatusBadge(reservation.status)}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: '0.875rem',
+                        color: '#5f6368'
+                      }}>
+                        <Clock size={16} />
+                        <span>
+                          {format(parseISO(reservation.startTime), 'HH:mm')} - {format(parseISO(reservation.endTime), 'HH:mm')}
+                        </span>
+                      </div>
+
+                      <div style={{ marginTop: '0.5rem' }}>
+                        {getStatusBadge(reservation.status)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -668,18 +914,36 @@ const Reservations = () => {
                 {reservation.status !== 'CANCELLED' && (
                   <div style={{
                     display: 'flex',
-                    gap: '0.5rem'
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    minWidth: '180px'
                   }}>
                     {reservation.isRecurring && reservation.recurringGroupId && (
                       <button
                         onClick={() => handleCancelRecurringGroup(reservation.recurringGroupId)}
-                        className="btn-secondary"
                         style={{
                           display: 'flex',
                           alignItems: 'center',
+                          justifyContent: 'center',
                           gap: '0.5rem',
+                          padding: '0.625rem 1rem',
+                          background: 'white',
+                          border: '2px solid #fbbc04',
+                          color: '#fbbc04',
+                          borderRadius: '10px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
                           fontSize: '0.875rem',
-                          padding: '0.5rem 1rem'
+                          transition: 'all 0.2s',
+                          width: '100%'
+                        }}
+                        onMouseOver={(e) => {
+                          e.target.style.background = '#fbbc04';
+                          e.target.style.color = 'white';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.background = 'white';
+                          e.target.style.color = '#fbbc04';
                         }}
                       >
                         <RefreshCw size={16} />
@@ -688,13 +952,29 @@ const Reservations = () => {
                     )}
                     <button
                       onClick={() => handleCancel(reservation.id)}
-                      className="btn-danger"
                       style={{
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'center',
                         gap: '0.5rem',
+                        padding: '0.625rem 1rem',
+                        background: 'white',
+                        border: '2px solid #ea4335',
+                        color: '#ea4335',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
                         fontSize: '0.875rem',
-                        padding: '0.5rem 1rem'
+                        transition: 'all 0.2s',
+                        width: '100%'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.background = '#ea4335';
+                        e.target.style.color = 'white';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.background = 'white';
+                        e.target.style.color = '#ea4335';
                       }}
                     >
                       <Trash2 size={16} />
@@ -706,546 +986,711 @@ const Reservations = () => {
             ))
           )}
         </div>
-
-        {showModal && (
-          <div 
-            className="modal-overlay" 
-            onClick={closeModal}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '2rem'
-            }}
-          >
-            <div 
-              className="modal" 
-              onClick={(e) => e.stopPropagation()} 
-              style={{ 
-                maxWidth: '700px',
-                width: '100%',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                margin: '0',
-                animation: 'slideUp 0.3s ease-out'
-              }}
-            >
-              <div 
-                style={{ 
-                  background: 'linear-gradient(135deg, #34a853, #2d8e47)',
-                  color: 'white',
-                  padding: '2rem',
-                  borderRadius: '16px 16px 0 0',
-                  position: 'relative'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{
-                    width: '50px',
-                    height: '50px',
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Calendar size={26} />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold" style={{ marginBottom: '0.25rem' }}>Nova Reserva</h2>
-                    <p style={{ opacity: 0.9, fontSize: '0.875rem' }}>Agende um horário para a quadra</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={closeModal}
-                  style={{
-                    position: 'absolute',
-                    top: '1.5rem',
-                    right: '1.5rem',
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    border: 'none',
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    color: 'white'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.3)'}
-                  onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.2)'}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div style={{ padding: '2rem', background: 'white' }}>
-                {error && (
-                  <div 
-                    className="alert alert-danger" 
-                    style={{ 
-                      marginBottom: '1.5rem',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem'
-                    }}
-                  >
-                    <Info size={20} />
-                    {error}
-                  </div>
-                )}
-
-                <form onSubmit={handleSubmit}>
-                  <div className="grid grid-2" style={{ gap: '1.5rem', marginBottom: '1.5rem' }}>
-                    <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label 
-                        htmlFor="courtId" 
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '0.5rem',
-                          marginBottom: '0.75rem',
-                          fontWeight: '600',
-                          color: 'var(--text-primary)'
-                        }}
-                      >
-                        <MapPin size={18} style={{ color: '#34a853' }} />
-                        Selecione a Quadra
-                      </label>
-                      <select
-                        id="courtId"
-                        name="courtId"
-                        value={formData.courtId}
-                        onChange={handleInputChange}
-                        required
-                        style={{
-                          padding: '1rem',
-                          borderRadius: '12px',
-                          border: '2px solid var(--border-color)',
-                          fontSize: '1rem',
-                          transition: 'all 0.2s',
-                          background: 'var(--bg-light)'
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                      >
-                        <option value="">Escolha uma quadra disponível</option>
-                        {courts
-                          .filter(court => court.status === 'AVAILABLE')
-                          .map(court => (
-                            <option key={court.id} value={court.id}>
-                              {court.name} • {court.sportType}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label 
-                        htmlFor="clientId"
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '0.5rem',
-                          marginBottom: '0.75rem',
-                          fontWeight: '600',
-                          color: 'var(--text-primary)'
-                        }}
-                      >
-                        <Users size={18} style={{ color: '#34a853' }} />
-                        Selecione o Cliente
-                      </label>
-                      <select
-                        id="clientId"
-                        name="clientId"
-                        value={formData.clientId}
-                        onChange={handleInputChange}
-                        required
-                        style={{
-                          padding: '1rem',
-                          borderRadius: '12px',
-                          border: '2px solid var(--border-color)',
-                          fontSize: '1rem',
-                          transition: 'all 0.2s',
-                          background: 'var(--bg-light)'
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                      >
-                        <option value="">Escolha um cliente da lista</option>
-                        {clients.map(client => (
-                          <option key={client.id} value={client.id}>
-                            {client.fullName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-2" style={{ gap: '1.5rem', marginBottom: '1.5rem' }}>
-                    <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label 
-                        htmlFor="date"
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '0.5rem',
-                          marginBottom: '0.75rem',
-                          fontWeight: '600',
-                          color: 'var(--text-primary)'
-                        }}
-                      >
-                        <Calendar size={18} style={{ color: '#34a853' }} />
-                        Data da Reserva
-                      </label>
-                      <input
-                        type="date"
-                        id="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleInputChange}
-                        required
-                        style={{
-                          padding: '1rem',
-                          borderRadius: '12px',
-                          border: '2px solid var(--border-color)',
-                          fontSize: '1rem',
-                          transition: 'all 0.2s',
-                          background: 'var(--bg-light)'
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                      />
-                    </div>
-
-                    <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label 
-                        htmlFor="time"
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '0.5rem',
-                          marginBottom: '0.75rem',
-                          fontWeight: '600',
-                          color: 'var(--text-primary)'
-                        }}
-                      >
-                        <Clock size={18} style={{ color: '#34a853' }} />
-                        Horário de Início
-                      </label>
-                      
-                      {!useCustomTime ? (
-                        <>
-                          <select
-                            id="time"
-                            name="time"
-                            value={formData.time}
-                            onChange={handleInputChange}
-                            required={!useCustomTime}
-                            style={{
-                              padding: '1rem',
-                              borderRadius: '12px',
-                              border: '2px solid var(--border-color)',
-                              fontSize: '1rem',
-                              transition: 'all 0.2s',
-                              background: 'var(--bg-light)'
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                            onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                          >
-                            <option value="">Selecione o horário</option>
-                            {roundTimeSlots.map(time => (
-                              <option key={time} value={time}>
-                                {time}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() => setUseCustomTime(true)}
-                            style={{
-                              marginTop: '0.5rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              background: 'none',
-                              border: 'none',
-                              color: '#34a853',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              padding: '0.25rem 0',
-                              fontWeight: '500'
-                            }}
-                          >
-                            <Edit3 size={14} />
-                            Digitar horário personalizado
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="time"
-                            id="customTime"
-                            name="customTime"
-                            value={formData.customTime}
-                            onChange={handleInputChange}
-                            required={useCustomTime}
-                            min="06:00"
-                            max="23:30"
-                            style={{
-                              padding: '1rem',
-                              borderRadius: '12px',
-                              border: '2px solid var(--border-color)',
-                              fontSize: '1rem',
-                              transition: 'all 0.2s',
-                              background: 'var(--bg-light)',
-                              cursor: 'text'
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                            onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUseCustomTime(false);
-                              setFormData({ ...formData, customTime: '' });
-                            }}
-                            style={{
-                              marginTop: '0.5rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              background: 'none',
-                              border: 'none',
-                              color: '#5f6368',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              padding: '0.25rem 0',
-                              fontWeight: '500'
-                            }}
-                          >
-                            <Clock size={14} />
-                            Voltar para horários sugeridos
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="input-group" style={{ marginBottom: '1.5rem' }}>
-                    <label 
-                      htmlFor="durationInHours"
-                      style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '0.5rem',
-                        marginBottom: '0.75rem',
-                        fontWeight: '600',
-                        color: 'var(--text-primary)'
-                      }}
-                    >
-                      <Clock size={18} style={{ color: '#34a853' }} />
-                      Duração (em horas)
-                    </label>
-                    <input
-                      type="number"
-                      id="durationInHours"
-                      name="durationInHours"
-                      value={formData.durationInHours}
-                      onChange={handleInputChange}
-                      min="0.5"
-                      max="12"
-                      step="0.5"
-                      required
-                      style={{
-                        padding: '1rem',
-                        borderRadius: '12px',
-                        border: '2px solid var(--border-color)',
-                        fontSize: '1rem',
-                        transition: 'all 0.2s',
-                        background: 'var(--bg-light)'
-                      }}
-                      onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                      onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                    />
-                  </div>
-
-                  <div style={{ 
-                    marginBottom: '1.5rem',
-                    padding: '1rem',
-                    background: 'var(--bg-light)',
-                    borderRadius: '10px',
-                    border: '1px solid var(--border-color)'
-                  }}>
-                    <label style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      color: 'var(--text-primary)'
-                    }}>
-                      <input
-                        type="checkbox"
-                        name="isRecurring"
-                        checked={formData.isRecurring}
-                        onChange={handleInputChange}
-                        style={{
-                          width: '18px',
-                          height: '18px',
-                          cursor: 'pointer'
-                        }}
-                      />
-                      <RefreshCw size={18} style={{ color: '#34a853' }} />
-                      <span>Criar Reserva Recorrente</span>
-                    </label>
-                    <small className="text-muted" style={{ marginLeft: '2.5rem', display: 'block', marginTop: '0.5rem' }}>
-                      Repetir esta reserva semanalmente ou mensalmente
-                    </small>
-                  </div>
-
-                  {formData.isRecurring && (
-                    <div style={{
-                      background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
-                      padding: '1.5rem',
-                      borderRadius: '12px',
-                      marginBottom: '1.5rem',
-                      border: '1px solid #bbf7d0'
-                    }}>
-                      <h4 style={{ 
-                        marginBottom: '1rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        color: 'var(--text-primary)'
-                      }}>
-                        <Info size={18} style={{ color: '#34a853' }} />
-                        Configurações de Recorrência
-                      </h4>
-
-                      <div className="grid grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
-                        <div className="input-group" style={{ marginBottom: 0 }}>
-                          <label htmlFor="frequency" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'block' }}>
-                            Frequência
-                          </label>
-                          <select
-                            id="frequency"
-                            name="frequency"
-                            value={formData.frequency}
-                            onChange={handleInputChange}
-                            required
-                            style={{
-                              padding: '0.75rem',
-                              borderRadius: '8px',
-                              border: '2px solid var(--border-color)',
-                              fontSize: '0.95rem',
-                              width: '100%'
-                            }}
-                          >
-                            <option value="WEEKLY">Semanal</option>
-                            <option value="MONTHLY">Mensal</option>
-                          </select>
-                        </div>
-
-                        <div className="input-group" style={{ marginBottom: 0 }}>
-                          <label htmlFor="endDate" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'block' }}>
-                            Data Final (opcional)
-                          </label>
-                          <input
-                            type="date"
-                            id="endDate"
-                            name="endDate"
-                            value={formData.endDate}
-                            onChange={handleInputChange}
-                            style={{
-                              padding: '0.75rem',
-                              borderRadius: '8px',
-                              border: '2px solid var(--border-color)',
-                              fontSize: '0.95rem',
-                              width: '100%'
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{
-                        marginTop: '0.75rem',
-                        padding: '0.75rem',
-                        background: 'rgba(52, 168, 83, 0.1)',
-                        borderRadius: '8px',
-                        fontSize: '0.875rem',
-                        color: 'var(--text-muted)'
-                      }}>
-                        <strong>Nota:</strong> A reserva será repetida no mesmo dia da semana e horário até a data final especificada.
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex" style={{ gap: '1rem' }}>
-                    <button 
-                      type="button" 
-                      className="btn btn-outline" 
-                      onClick={closeModal} 
-                      style={{ 
-                        flex: 1,
-                        padding: '1rem',
-                        borderRadius: '12px',
-                        fontWeight: '600',
-                        fontSize: '1rem'
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                    <button 
-                      type="submit" 
-                      className="btn btn-primary" 
-                      style={{ 
-                        flex: 1,
-                        padding: '1rem',
-                        borderRadius: '12px',
-                        fontWeight: '600',
-                        fontSize: '1rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem'
-                      }}
-                    >
-                      <Calendar size={20} />
-                      Criar Reserva
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      <style jsx>{`
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+      {showModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }}
+          onClick={closeModal}
+        >
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '600px',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              padding: '2rem',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '1.5rem',
+                fontWeight: '700',
+                color: 'var(--text-primary)'
+              }}>
+                Nova Reserva
+              </h2>
+              <button
+                onClick={closeModal}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#5f6368',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => e.target.style.background = '#f1f3f4'}
+                onMouseOut={(e) => e.target.style.background = 'none'}
+              >
+                <X size={24} />
+              </button>
+            </div>
 
-        input[type="time"]::-webkit-calendar-picker-indicator {
-          cursor: pointer;
-          filter: invert(53%) sepia(94%) saturate(396%) hue-rotate(92deg) brightness(92%) contrast(91%);
-        }
+            <form onSubmit={handleSubmit} style={{ padding: '2rem' }}>
+              {error && (
+                <div style={{
+                  background: '#f8d7da',
+                  border: '1px solid #f5c6cb',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  marginBottom: '1.5rem',
+                  color: '#721c24',
+                  fontSize: '0.9rem'
+                }}>
+                  {error}
+                </div>
+              )}
 
-        input[type="time"]:hover::-webkit-calendar-picker-indicator {
-          filter: invert(40%) sepia(94%) saturate(396%) hue-rotate(92deg) brightness(92%) contrast(91%);
-        }
-      `}</style>
+              <div className="input-group">
+                <label htmlFor="courtId">
+                  <MapPin size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Quadra
+                </label>
+                <select
+                  id="courtId"
+                  name="courtId"
+                  value={formData.courtId}
+                  onChange={handleInputChange}
+                  required
+                  style={{
+                    padding: '0.875rem',
+                    borderRadius: '10px',
+                    border: '2px solid var(--border-color)',
+                    fontSize: '0.95rem',
+                    width: '100%'
+                  }}
+                >
+                  <option value="">Selecione uma quadra</option>
+                  {courts.map((court) => (
+                    <option key={court.id} value={court.id}>
+                      {court.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="clientId">
+                  <User size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Cliente
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select
+                    id="clientId"
+                    name="clientId"
+                    value={formData.clientId}
+                    onChange={handleInputChange}
+                    required
+                    style={{
+                      flex: 1,
+                      padding: '0.875rem',
+                      borderRadius: '10px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '0.95rem'
+                    }}
+                  >
+                    <option value="">Selecione um cliente</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.fullName}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={openClientModal}
+                    style={{
+                      padding: '0 1rem',
+                      borderRadius: '10px',
+                      border: '2px solid #34a853',
+                      background: 'white',
+                      color: '#34a853',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#34a853';
+                      e.target.style.color = 'white';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'white';
+                      e.target.style.color = '#34a853';
+                    }}
+                  >
+                    <UserPlus size={18} />
+                    Novo
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-2" style={{ gap: '1rem' }}>
+                <div className="input-group">
+                  <label htmlFor="date">
+                    <Calendar size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                    Data
+                  </label>
+                  <input
+                    type="date"
+                    id="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleInputChange}
+                    required
+                    style={{
+                      padding: '0.875rem',
+                      borderRadius: '10px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '0.95rem',
+                      width: '100%'
+                    }}
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label htmlFor="durationInHours">
+                    <Clock size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                    Duração (horas)
+                  </label>
+                  <input
+                    type="number"
+                    id="durationInHours"
+                    name="durationInHours"
+                    value={formData.durationInHours}
+                    onChange={handleInputChange}
+                    min="0.5"
+                    max="12"
+                    step="0.5"
+                    required
+                    style={{
+                      padding: '0.875rem',
+                      borderRadius: '10px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '0.95rem',
+                      width: '100%'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label style={{ marginBottom: '0.75rem', display: 'block' }}>
+                  <Clock size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                  Horário
+                </label>
+                
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setUseCustomTime(false)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: !useCustomTime ? '#34a853' : 'var(--border-color)',
+                      background: !useCustomTime ? '#34a85310' : 'white',
+                      color: !useCustomTime ? '#34a853' : '#5f6368',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Horário Redondo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseCustomTime(true)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: useCustomTime ? '#34a853' : 'var(--border-color)',
+                      background: useCustomTime ? '#34a85310' : 'white',
+                      color: useCustomTime ? '#34a853' : '#5f6368',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Horário Personalizado
+                  </button>
+                </div>
+
+                {!useCustomTime ? (
+                  <select
+                    id="time"
+                    name="time"
+                    value={formData.time}
+                    onChange={handleInputChange}
+                    required={!useCustomTime}
+                    style={{
+                      padding: '0.875rem',
+                      borderRadius: '10px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '0.95rem',
+                      width: '100%'
+                    }}
+                  >
+                    <option value="">Selecione o horário</option>
+                    {roundTimeSlots.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="time"
+                    id="customTime"
+                    name="customTime"
+                    value={formData.customTime}
+                    onChange={handleInputChange}
+                    required={useCustomTime}
+                    style={{
+                      padding: '0.875rem',
+                      borderRadius: '10px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '0.95rem',
+                      width: '100%'
+                    }}
+                  />
+                )}
+              </div>
+
+              <div className="input-group">
+                <label style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}>
+                  <input
+                    type="checkbox"
+                    name="isRecurring"
+                    checked={formData.isRecurring}
+                    onChange={handleInputChange}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <RefreshCw size={16} />
+                  Reserva Recorrente
+                </label>
+              </div>
+
+              {formData.isRecurring && (
+                <div className="grid grid-2" style={{ gap: '1rem' }}>
+                  <div className="input-group">
+                    <label htmlFor="frequency">Frequência</label>
+                    <select
+                      id="frequency"
+                      name="frequency"
+                      value={formData.frequency}
+                      onChange={handleInputChange}
+                      style={{
+                        padding: '0.875rem',
+                        borderRadius: '10px',
+                        border: '2px solid var(--border-color)',
+                        fontSize: '0.95rem',
+                        width: '100%'
+                      }}
+                    >
+                      <option value="WEEKLY">Semanal</option>
+                      <option value="MONTHLY">Mensal</option>
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="endDate">Data Final</label>
+                    <input
+                      type="date"
+                      id="endDate"
+                      name="endDate"
+                      value={formData.endDate}
+                      onChange={handleInputChange}
+                      required={formData.isRecurring}
+                      style={{
+                        padding: '0.875rem',
+                        borderRadius: '10px',
+                        border: '2px solid var(--border-color)',
+                        fontSize: '0.95rem',
+                        width: '100%'
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                marginTop: '2rem'
+              }}>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  style={{
+                    flex: 1,
+                    padding: '0.875rem',
+                    borderRadius: '10px',
+                    border: '2px solid var(--border-color)',
+                    background: 'white',
+                    color: '#5f6368',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '0.95rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.target.style.background = '#f1f3f4'}
+                  onMouseOut={(e) => e.target.style.background = 'white'}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1,
+                    padding: '0.875rem',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: '#34a853',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '0.95rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.target.style.background = '#2d8e47'}
+                  onMouseOut={(e) => e.target.style.background = '#34a853'}
+                >
+                  Criar Reserva
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showClientModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem'
+          }}
+          onClick={closeClientModal}
+        >
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              color: 'white',
+              padding: '2rem',
+              borderRadius: '16px 16px 0 0',
+              position: 'relative'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{
+                  width: '50px',
+                  height: '50px',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <UserPlus size={26} />
+                </div>
+                <div>
+                  <h2 style={{ marginBottom: '0.25rem', fontSize: '1.5rem', fontWeight: '700' }}>Cadastro Rápido</h2>
+                  <p style={{ opacity: 0.9, fontSize: '0.875rem', margin: 0 }}>Adicione um novo cliente</p>
+                </div>
+              </div>
+              <button 
+                onClick={closeClientModal}
+                disabled={savingClient}
+                style={{
+                  position: 'absolute',
+                  top: '1.5rem',
+                  right: '1.5rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: savingClient ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  color: 'white',
+                  opacity: savingClient ? 0.5 : 1
+                }}
+                onMouseEnter={(e) => !savingClient && (e.target.style.background = 'rgba(255, 255, 255, 0.3)')}
+                onMouseLeave={(e) => !savingClient && (e.target.style.background = 'rgba(255, 255, 255, 0.2)')}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '2rem', background: 'white' }}>
+              {clientError && (
+                <div style={{
+                  background: '#f8d7da',
+                  border: '1px solid #f5c6cb',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  marginBottom: '1.5rem',
+                  color: '#721c24',
+                  fontSize: '0.9rem'
+                }}>
+                  {clientError}
+                </div>
+              )}
+
+              {clientSuccess && (
+                <div style={{
+                  background: '#d4edda',
+                  border: '1px solid #c3e6cb',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  marginBottom: '1.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#155724',
+                  fontSize: '0.9rem'
+                }}>
+                  <CheckCircle size={20} />
+                  {clientSuccess}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveClient}>
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label htmlFor="fullName" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <User size={16} style={{ color: '#3b82f6' }} />
+                    Nome Completo *
+                  </label>
+                  <input
+                    type="text"
+                    id="fullName"
+                    name="fullName"
+                    value={clientFormData.fullName}
+                    onChange={handleClientInputChange}
+                    placeholder="Ex: João da Silva"
+                    required
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label htmlFor="phone" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Phone size={16} style={{ color: '#3b82f6' }} />
+                    Telefone *
+                  </label>
+                  <MaskedInput
+                    type="phone"
+                    id="phone"
+                    name="phone"
+                    value={clientFormData.phone}
+                    onChange={handleClientInputChange}
+                    placeholder="(XX) XXXXX-XXXX"
+                    required
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label htmlFor="email" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Mail size={16} style={{ color: '#3b82f6' }} />
+                    Email (opcional)
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={clientFormData.email}
+                    onChange={handleClientInputChange}
+                    placeholder="email@exemplo.com"
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginBottom: '2rem' }}>
+                  <label htmlFor="cpf" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <FileText size={16} style={{ color: '#3b82f6' }} />
+                    CPF (opcional)
+                  </label>
+                  <MaskedInput
+                    type="cpf"
+                    id="cpf"
+                    name="cpf"
+                    value={clientFormData.cpf}
+                    onChange={handleClientInputChange}
+                    placeholder="XXX.XXX.XXX-XX"
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    type="button" 
+                    onClick={closeClientModal}
+                    disabled={savingClient}
+                    style={{
+                      flex: 1,
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      background: 'white',
+                      color: '#5f6368',
+                      cursor: savingClient ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '1rem',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => !savingClient && (e.target.style.background = '#f1f3f4')}
+                    onMouseOut={(e) => !savingClient && (e.target.style.background = 'white')}
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={savingClient}
+                    style={{
+                      flex: 1,
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: 'none',
+                      background: '#3b82f6',
+                      color: 'white',
+                      cursor: savingClient ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      transition: 'all 0.2s',
+                      opacity: savingClient ? 0.7 : 1
+                    }}
+                    onMouseOver={(e) => !savingClient && (e.target.style.background = '#2563eb')}
+                    onMouseOut={(e) => !savingClient && (e.target.style.background = '#3b82f6')}
+                  >
+                    {savingClient ? (
+                      <>
+                        <div className="loading" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div>
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={20} />
+                        Salvar Cliente
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

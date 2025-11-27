@@ -2,40 +2,21 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware } = require('../middleware/auth');
 const { checkPermission } = require('../middleware/permissions');
-const { reservationValidators, validateId } = require('../validators/validators');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-router.get('/', authMiddleware, checkPermission('reservations', 'view'), reservationValidators.query, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('reservations', 'view'), async (req, res) => {
   try {
-    const { startDate, endDate, courtId, status } = req.query;
-    
-    const where = {
-      court: { complexId: req.user.complexId }
-    };
-
-    if (startDate && endDate) {
-      where.startTime = { gte: new Date(startDate) };
-      where.endTime = { lte: new Date(endDate) };
-    }
-
-    if (courtId) {
-      where.courtId = courtId;
-    }
-
-    if (status) {
-      where.status = status;
-    }
-
     const reservations = await prisma.reservation.findMany({
-      where,
+      where: {
+        court: { complexId: req.user.complexId }
+      },
       include: {
         court: true,
-        client: true,
-        recurringGroup: true
+        client: true
       },
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: 'desc' }
     });
 
     res.json(reservations);
@@ -45,7 +26,7 @@ router.get('/', authMiddleware, checkPermission('reservations', 'view'), reserva
   }
 });
 
-router.get('/:id', authMiddleware, checkPermission('reservations', 'view'), validateId, async (req, res) => {
+router.get('/:id', authMiddleware, checkPermission('reservations', 'view'), async (req, res) => {
   try {
     const reservation = await prisma.reservation.findFirst({
       where: {
@@ -54,9 +35,7 @@ router.get('/:id', authMiddleware, checkPermission('reservations', 'view'), vali
       },
       include: {
         court: true,
-        client: true,
-        recurringGroup: true,
-        tabs: true
+        client: true
       }
     });
 
@@ -71,21 +50,15 @@ router.get('/:id', authMiddleware, checkPermission('reservations', 'view'), vali
   }
 });
 
-router.post('/', authMiddleware, checkPermission('reservations', 'create'), reservationValidators.create, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('reservations', 'create'), async (req, res) => {
   try {
-    const {
-      courtId,
-      clientId,
-      startTime,
-      durationInHours = 1,
-      isRecurring,
-      frequency,
-      dayOfWeek,
-      endDate
-    } = req.body;
+    const { courtId, clientId, startTime, durationInHours, isRecurring, frequency, endDate } = req.body;
 
     const court = await prisma.court.findFirst({
-      where: { id: courtId, complexId: req.user.complexId }
+      where: {
+        id: courtId,
+        complexId: req.user.complexId
+      }
     });
 
     if (!court) {
@@ -93,7 +66,10 @@ router.post('/', authMiddleware, checkPermission('reservations', 'create'), rese
     }
 
     const client = await prisma.client.findFirst({
-      where: { id: clientId, complexId: req.user.complexId }
+      where: {
+        id: clientId,
+        complexId: req.user.complexId
+      }
     });
 
     if (!client) {
@@ -102,8 +78,8 @@ router.post('/', authMiddleware, checkPermission('reservations', 'create'), rese
 
     const start = new Date(startTime);
     const duration = parseFloat(durationInHours);
-    
-    if (isNaN(duration) || duration <= 0 || duration > 12) {
+
+    if (isNaN(duration) || duration < 0.5 || duration > 12) {
       return res.status(400).json({ 
         error: 'Duração inválida. Deve ser entre 0.5 e 12 horas' 
       });
@@ -232,7 +208,7 @@ router.post('/', authMiddleware, checkPermission('reservations', 'create'), rese
   }
 });
 
-router.put('/:id', authMiddleware, checkPermission('reservations', 'edit'), validateId, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('reservations', 'edit'), async (req, res) => {
   try {
     const { startTime, durationInHours, status } = req.body;
 
@@ -270,53 +246,15 @@ router.put('/:id', authMiddleware, checkPermission('reservations', 'edit'), vali
         openTabs: reservation.tabs.length
       });
     }
-    
-    let newStartTime = startTime ? new Date(startTime) : reservation.startTime;
-    let newEndTime = reservation.endTime;
-
-    if (startTime && newStartTime < now) {
-      return res.status(400).json({ 
-        error: 'Não é possível alterar para uma data ou horário que já passou' 
-      });
-    }
-
-    if (durationInHours) {
-      const duration = parseFloat(durationInHours);
-      if (isNaN(duration) || duration <= 0 || duration > 12) {
-        return res.status(400).json({ 
-          error: 'Duração inválida. Deve ser entre 0.5 e 12 horas' 
-        });
-      }
-      const durationInMilliseconds = duration * 60 * 60 * 1000;
-      newEndTime = new Date(newStartTime.getTime() + durationInMilliseconds);
-    }
-
-    if (startTime || durationInHours) {
-      const conflict = await prisma.reservation.findFirst({
-        where: {
-          courtId: reservation.courtId,
-          id: { not: req.params.id },
-          status: { not: 'CANCELLED' },
-          OR: [
-            { AND: [{ startTime: { lte: newStartTime } }, { endTime: { gt: newStartTime } }] },
-            { AND: [{ startTime: { lt: newEndTime } }, { endTime: { gte: newEndTime } }] }
-          ]
-        }
-      });
-
-      if (conflict) {
-        return res.status(409).json({ 
-          error: 'Novo horário conflita com outra reserva existente' 
-        });
-      }
-    }
 
     const updatedReservation = await prisma.reservation.update({
       where: { id: req.params.id },
       data: {
-        ...(startTime && { startTime: newStartTime }),
-        ...(durationInHours && { endTime: newEndTime }),
-        ...(status && { status })
+        startTime: startTime ? new Date(startTime) : undefined,
+        endTime: startTime && durationInHours 
+          ? new Date(new Date(startTime).getTime() + (durationInHours * 60 * 60 * 1000))
+          : undefined,
+        status
       },
       include: {
         court: true,
@@ -331,7 +269,7 @@ router.put('/:id', authMiddleware, checkPermission('reservations', 'edit'), vali
   }
 });
 
-router.delete('/:id', authMiddleware, checkPermission('reservations', 'cancel'), validateId, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('reservations', 'cancel'), async (req, res) => {
   try {
     const reservation = await prisma.reservation.findFirst({
       where: {
@@ -347,9 +285,9 @@ router.delete('/:id', authMiddleware, checkPermission('reservations', 'cancel'),
       return res.status(404).json({ error: 'Reserva não encontrada' });
     }
 
-    if (reservation.tabs.length > 0) {
-      return res.status(400).json({ 
-        error: 'Não é possível cancelar reserva com comandas abertas. Feche as comandas primeiro.',
+    if (reservation.tabs && reservation.tabs.length > 0) {
+      return res.status(400).json({
+        error: 'Não é possível cancelar reserva com comanda aberta. Feche as comandas primeiro.',
         openTabs: reservation.tabs.length
       });
     }
@@ -366,6 +304,55 @@ router.delete('/:id', authMiddleware, checkPermission('reservations', 'cancel'),
   } catch (error) {
     console.error('Erro ao cancelar reserva:', error);
     res.status(500).json({ error: 'Erro ao cancelar reserva' });
+  }
+});
+
+router.post('/cancel-multiple', authMiddleware, checkPermission('reservations', 'cancel'), async (req, res) => {
+  try {
+    const { reservationIds } = req.body;
+
+    if (!Array.isArray(reservationIds) || reservationIds.length === 0) {
+      return res.status(400).json({ error: 'Lista de IDs inválida' });
+    }
+
+    const reservations = await prisma.reservation.findMany({
+      where: {
+        id: { in: reservationIds },
+        court: { complexId: req.user.complexId }
+      },
+      include: {
+        tabs: { where: { status: 'OPEN' } }
+      }
+    });
+
+    if (reservations.length !== reservationIds.length) {
+      return res.status(404).json({ error: 'Algumas reservas não foram encontradas' });
+    }
+
+    const reservationsWithOpenTabs = reservations.filter(r => r.tabs && r.tabs.length > 0);
+    
+    if (reservationsWithOpenTabs.length > 0) {
+      return res.status(400).json({
+        error: 'Não é possível cancelar reservas com comandas abertas',
+        reservationsWithOpenTabs: reservationsWithOpenTabs.map(r => r.id)
+      });
+    }
+
+    const result = await prisma.reservation.updateMany({
+      where: {
+        id: { in: reservationIds },
+        court: { complexId: req.user.complexId }
+      },
+      data: { status: 'CANCELLED' }
+    });
+
+    res.json({ 
+      message: `${result.count} reservas canceladas com sucesso`,
+      cancelledCount: result.count
+    });
+  } catch (error) {
+    console.error('Erro ao cancelar reservas:', error);
+    res.status(500).json({ error: 'Erro ao cancelar reservas múltiplas' });
   }
 });
 

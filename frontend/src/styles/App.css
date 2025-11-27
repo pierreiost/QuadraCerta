@@ -705,7 +705,7 @@ tr:hover {
   }
 
   .alert {
-  white-space: pre-line;
-  line-height: 1.6;
-}
+    white-space: pre-line;
+    line-height: 1.6;
+  }
 }

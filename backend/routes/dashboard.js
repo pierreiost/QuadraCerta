@@ -6,9 +6,12 @@ const { checkPermission } = require('../middleware/permissions');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Dashboard - Visão Geral
 router.get('/overview', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
+    const now = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
     const totalCourts = await prisma.court.count({
       where: { complexId: req.user.complexId }
     });
@@ -35,7 +38,10 @@ router.get('/overview', authMiddleware, checkPermission('dashboard', 'view'), as
       where: {
         court: { complexId: req.user.complexId },
         status: { not: 'CANCELLED' },
-        startTime: { gte: new Date() }
+        startTime: { 
+          gte: now,
+          lte: sevenDaysFromNow 
+        }
       }
     });
 
@@ -70,22 +76,27 @@ router.get('/overview', authMiddleware, checkPermission('dashboard', 'view'), as
   }
 });
 
-// Próximos horários
 router.get('/upcoming', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
     const now = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
     const upcomingReservations = await prisma.reservation.findMany({
       where: {
         court: { complexId: req.user.complexId },
-        status: 'CONFIRMED',
-        startTime: { gte: now }
+        status: { not: 'CANCELLED' },
+        startTime: { 
+          gte: now,
+          lte: sevenDaysFromNow 
+        }
       },
       include: {
         court: true,
         client: true
       },
       orderBy: { startTime: 'asc' },
-      take: 10
+      take: 20
     });
 
     res.json(upcomingReservations);
@@ -95,7 +106,6 @@ router.get('/upcoming', authMiddleware, checkPermission('dashboard', 'view'), as
   }
 });
 
-// Relatório de receitas
 router.get('/revenue', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -134,7 +144,6 @@ router.get('/revenue', authMiddleware, checkPermission('dashboard', 'view'), asy
   }
 });
 
-// Relatório de ocupação
 router.get('/occupancy', authMiddleware, checkPermission('dashboard', 'view'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;

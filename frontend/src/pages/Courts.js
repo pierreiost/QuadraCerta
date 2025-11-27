@@ -93,7 +93,7 @@ const Courts = () => {
       ...formData,
       [name]: value
     });
-    
+
     if (validationErrors[name]) {
       setValidationErrors({
         ...validationErrors,
@@ -166,13 +166,13 @@ const Courts = () => {
         await courtService.create(dataToSend);
         setSuccess('Quadra criada com sucesso!');
       }
-      
+
       closeModal();
       loadCourts();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       console.error('Erro ao salvar quadra:', error);
-      
+
       if (error.response?.data?.details) {
         const backendErrors = {};
         error.response.data.details.forEach(err => {
@@ -186,46 +186,46 @@ const Courts = () => {
     }
   };
 
-const handleDelete = async (id) => {
-  const court = courts.find(c => c.id === id);
-  const courtName = court ? court.name : 'esta quadra';
-  
-  if (!window.confirm(`Tem certeza que deseja excluir a quadra "${courtName}"?`)) {
-    return;
-  }
+  const handleDelete = async (id) => {
+    const court = courts.find(c => c.id === id);
+    const courtName = court ? court.name : 'esta quadra';
 
-  try {
-    await courtService.delete(id);
-    setSuccess('Quadra excluída com sucesso!');
-    loadCourts();
-    setTimeout(() => setSuccess(''), 3000);
-  } catch (error) {
-    console.error('Erro ao excluir quadra:', error);
-    
-    if (error.response?.status === 409) {
-      const activeCount = error.response?.data?.activeReservations;
-      
-      if (activeCount) {
-        setError(
-          `⚠️ Não é possível excluir a quadra "${courtName}".\n\n` +
-          `Existem ${activeCount} reserva${activeCount > 1 ? 's' : ''} ativa${activeCount > 1 ? 's' : ''} agendada${activeCount > 1 ? 's' : ''} para esta quadra.\n\n` +
-          `Por favor, cancele todas as reservas futuras antes de excluir a quadra.`
-        );
-      } else {
-        setError(error.response?.data?.error || 'Esta quadra possui reservas ativas e não pode ser excluída.');
-      }
-      
-      setTimeout(() => setError(''), 7000);
-    } else {
-      setError(error.response?.data?.error || 'Erro ao excluir quadra. Tente novamente.');
-      setTimeout(() => setError(''), 4000);
+    if (!window.confirm(`Tem certeza que deseja excluir a quadra "${courtName}"?`)) {
+      return;
     }
-  }
-};
+
+    try {
+      await courtService.delete(id);
+      setSuccess('Quadra excluída com sucesso!');
+      loadCourts();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Erro ao excluir quadra:', error);
+
+      if (error.response?.status === 409) {
+        const activeCount = error.response?.data?.activeReservations;
+
+        if (activeCount) {
+          setError(
+            `⚠️ Não é possível excluir a quadra "${courtName}".\n\n` +
+            `Existem ${activeCount} reserva${activeCount > 1 ? 's' : ''} ativa${activeCount > 1 ? 's' : ''} agendada${activeCount > 1 ? 's' : ''} para esta quadra.\n\n` +
+            `Por favor, cancele todas as reservas futuras antes de excluir a quadra.`
+          );
+        } else {
+          setError(error.response?.data?.error || 'Esta quadra possui reservas ativas e não pode ser excluída.');
+        }
+
+        setTimeout(() => setError(''), 7000);
+      } else {
+        setError(error.response?.data?.error || 'Erro ao excluir quadra. Tente novamente.');
+        setTimeout(() => setError(''), 4000);
+      }
+    }
+  };
 
   const handleCreateType = async (e) => {
     e.preventDefault();
-    
+
     if (!typeFormData.name.trim()) {
       setError('Nome do tipo é obrigatório');
       return;
@@ -282,7 +282,7 @@ const handleDelete = async (id) => {
   return (
     <>
       <Header />
-      
+
       <div className="container" style={{ padding: '2rem 1rem' }}>
         <div className="flex-between" style={{ marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
@@ -290,8 +290,8 @@ const handleDelete = async (id) => {
             <p className="text-muted">Cadastre e gerencie as quadras do seu complexo</p>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <button 
-              className="btn btn-secondary" 
+            <button
+              className="btn btn-secondary"
               onClick={() => setShowTypeModal(true)}
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
@@ -359,7 +359,7 @@ const handleDelete = async (id) => {
                   </div>
 
                   <div className="flex-between" style={{ gap: '0.5rem' }}>
-                    <button 
+                    <button
                       className="btn btn-secondary"
                       onClick={() => openModal(court)}
                       style={{ flex: 1 }}
@@ -367,7 +367,7 @@ const handleDelete = async (id) => {
                       <Edit2 size={16} />
                       Editar
                     </button>
-                    <button 
+                    <button
                       className="btn btn-danger"
                       onClick={() => handleDelete(court.id)}
                       style={{ flex: 1 }}
@@ -392,11 +392,11 @@ const handleDelete = async (id) => {
                 <h2 className="text-xl font-bold">
                   {editingCourt ? 'Editar Quadra' : 'Nova Quadra'}
                 </h2>
-                <button 
+                <button
                   onClick={closeModal}
-                  style={{ 
-                    background: 'none', 
-                    border: 'none', 
+                  style={{
+                    background: 'none',
+                    border: 'none',
                     cursor: 'pointer',
                     padding: '0.5rem',
                     color: 'var(--gray-600)',
@@ -512,16 +512,16 @@ const handleDelete = async (id) => {
                 </div>
 
                 <div className="flex-between" style={{ gap: '1rem', marginTop: '1.5rem' }}>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn btn-secondary"
                     onClick={closeModal}
                     style={{ flex: 1 }}
                   >
                     Cancelar
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     className="btn btn-primary"
                     style={{ flex: 1 }}
                   >
@@ -541,11 +541,11 @@ const handleDelete = async (id) => {
             <div className="card" style={{ margin: 0, maxWidth: '500px', width: '100%' }}>
               <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
                 <h2 className="text-xl font-bold">Gerenciar Tipos de Quadra</h2>
-                <button 
+                <button
                   onClick={() => setShowTypeModal(false)}
-                  style={{ 
-                    background: 'none', 
-                    border: 'none', 
+                  style={{
+                    background: 'none',
+                    border: 'none',
                     cursor: 'pointer',
                     padding: '0.5rem',
                     color: 'var(--gray-600)'
@@ -590,10 +590,10 @@ const handleDelete = async (id) => {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {courtTypes.map(type => (
-                      <div 
+                      <div
                         key={type.id}
                         className="flex-between"
-                        style={{ 
+                        style={{
                           padding: '0.75rem',
                           background: 'var(--gray-50)',
                           borderRadius: 'var(--radius)',

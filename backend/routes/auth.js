@@ -27,32 +27,32 @@ const registerValidation = [
     .trim()
     .notEmpty().withMessage('Nome é obrigatório')
     .isLength({ min: 2, max: 50 }).withMessage('Nome deve ter entre 2 e 50 caracteres'),
-  
+
   body('lastName')
     .trim()
     .notEmpty().withMessage('Sobrenome é obrigatório')
     .isLength({ min: 2, max: 50 }).withMessage('Sobrenome deve ter entre 2 e 50 caracteres'),
-  
+
   body('email')
     .trim()
     .notEmpty().withMessage('Email é obrigatório')
     .isEmail().withMessage('Email inválido')
     .normalizeEmail(),
-  
+
   body('password')
     .notEmpty().withMessage('Senha é obrigatória')
     .isLength({ min: 6 }).withMessage('Senha deve ter no mínimo 6 caracteres'),
-  
+
   body('phone')
     .trim()
     .notEmpty().withMessage('Telefone é obrigatório')
     .matches(/^\(\d{2}\)\s?\d{4,5}-\d{4}$/).withMessage('Telefone inválido. Use (XX) XXXXX-XXXX'),
-  
+
   body('complexName')
     .trim()
     .notEmpty().withMessage('Nome do complexo é obrigatório')
     .isLength({ min: 3, max: 100 }).withMessage('Nome do complexo deve ter entre 3 e 100 caracteres'),
-  
+
   body('cnpj')
     .trim()
     .notEmpty().withMessage('CNPJ é obrigatório')
@@ -65,7 +65,7 @@ const loginValidation = [
     .notEmpty().withMessage('Email é obrigatório')
     .isEmail().withMessage('Email inválido')
     .normalizeEmail(),
-  
+
   body('password')
     .notEmpty().withMessage('Senha é obrigatória')
 ];
@@ -75,7 +75,7 @@ router.post('/register', registerValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Dados inválidos',
         details: errors.array().map(err => err.msg)
       });
@@ -101,14 +101,13 @@ router.post('/register', registerValidation, async (req, res) => {
       return res.status(409).json({ error: 'CNPJ já está cadastrado' });
     }
 
-    // ✅ NOVO: Verificar nome do complexo duplicado
     const existingComplexName = await prisma.complex.findFirst({
       where: { name: complexName }
     });
 
     if (existingComplexName) {
-      return res.status(409).json({ 
-        error: 'Já existe um complexo com este nome. Por favor, escolha outro nome.' 
+      return res.status(409).json({
+        error: 'Já existe um complexo com este nome. Por favor, escolha outro nome.'
       });
     }
 
@@ -172,19 +171,18 @@ router.post('/register', registerValidation, async (req, res) => {
 
   } catch (error) {
     console.error('Erro no registro:', error);
-    
-    // Tratamento específico para erro de constraint única
+
     if (error.code === 'P2002') {
       if (error.meta?.target?.includes('name')) {
-        return res.status(409).json({ 
-          error: 'Já existe um complexo com este nome. Por favor, escolha outro nome.' 
+        return res.status(409).json({
+          error: 'Já existe um complexo com este nome. Por favor, escolha outro nome.'
         });
       }
       if (error.meta?.target?.includes('cnpj')) {
         return res.status(409).json({ error: 'CNPJ já está cadastrado' });
       }
     }
-    
+
     res.status(500).json({ error: 'Erro ao criar conta. Tente novamente.' });
   }
 });
@@ -194,7 +192,7 @@ router.post('/login', loginFailureLimiter, loginValidation, async (req, res) => 
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Dados inválidos',
         details: errors.array().map(err => err.msg)
       });
@@ -225,37 +223,35 @@ router.post('/login', loginFailureLimiter, loginValidation, async (req, res) => 
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    // Verificar status do usuário
     if (user.status === 'PENDING') {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Sua conta está aguardando aprovação. Você receberá um email quando for aprovada.',
         status: 'PENDING'
       });
     }
 
     if (user.status === 'REJECTED') {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Sua conta foi rejeitada. Entre em contato com o suporte para mais informações.',
         status: 'REJECTED'
       });
     }
 
     if (user.status === 'SUSPENDED') {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Sua conta está suspensa. Entre em contato com o suporte.',
         status: 'SUSPENDED'
       });
     }
 
-    // SUPER_ADMIN não tem complexId
     if (user.role !== 'SUPER_ADMIN' && !user.complexId) {
-      return res.status(403).json({ 
-        error: 'Erro na configuração da conta. Entre em contato com o suporte.' 
+      return res.status(403).json({
+        error: 'Erro na configuração da conta. Entre em contato com o suporte.'
       });
     }
-    
+
     const token = jwt.sign(
-      { 
+      {
         userId: user.id,
         complexId: user.complexId,
         role: user.role
@@ -362,13 +358,40 @@ router.put('/change-password', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'Nova senha deve ter no mínimo 6 caracteres' });
-    }
-
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId }
     });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    // Validação diferenciada por role
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: 'A senha deve ter no mínimo 8 caracteres' });
+      }
+
+      if (!/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({ error: 'A senha deve conter pelo menos uma letra maiúscula' });
+      }
+
+      if (!/[a-z]/.test(newPassword)) {
+        return res.status(400).json({ error: 'A senha deve conter pelo menos uma letra minúscula' });
+      }
+
+      if (!/[0-9]/.test(newPassword)) {
+        return res.status(400).json({ error: 'A senha deve conter pelo menos um número' });
+      }
+
+      if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+        return res.status(400).json({ error: 'A senha deve conter pelo menos um caractere especial' });
+      }
+    } else {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Nova senha deve ter no mínimo 6 caracteres' });
+      }
+    }
 
     const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
 

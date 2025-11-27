@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import MaskedInput from '../components/MaskedInput';
 import { dashboardService, courtService, clientService, reservationService } from '../services/api';
 import { 
   MapPin, 
@@ -14,9 +15,17 @@ import {
   Calendar,
   RefreshCw,
   Info,
-  Edit3
+  Edit3,
+  Eye,
+  EyeOff,
+  User,
+  UserPlus,
+  Phone,
+  Mail,
+  FileText,
+  CheckCircle
 } from 'lucide-react';
-import { format, addHours, parseISO } from 'date-fns';
+import { format, addHours, parseISO, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import FullCalendar from '@fullcalendar/react';
@@ -34,6 +43,7 @@ const Dashboard = () => {
   
   const [showModal, setShowModal] = useState(false);
   const [useCustomTime, setUseCustomTime] = useState(false);
+  const [showPastReservations, setShowPastReservations] = useState(true);
 
   const [formData, setFormData] = useState({
     courtId: '',
@@ -49,6 +59,18 @@ const Dashboard = () => {
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Estados para cadastro rápido de cliente
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [clientFormData, setClientFormData] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    cpf: ''
+  });
+  const [clientError, setClientError] = useState('');
+  const [clientSuccess, setClientSuccess] = useState('');
+  const [savingClient, setSavingClient] = useState(false);
 
   const generateRoundTimeSlots = () => {
     const slots = [];
@@ -87,8 +109,19 @@ const Dashboard = () => {
   };
 
   const calendarEvents = useMemo(() => {
+    const today = startOfDay(new Date());
+    
     return reservations
-      .filter(res => res.status !== 'CANCELLED')
+      .filter(res => {
+        if (res.status === 'CANCELLED') return false;
+        
+        if (!showPastReservations) {
+          const eventDate = startOfDay(new Date(res.startTime));
+          return !isBefore(eventDate, today);
+        }
+        
+        return true;
+      })
       .map(res => ({
         id: res.id,
         title: `${res.client.fullName} (${res.court.name})`,
@@ -96,7 +129,7 @@ const Dashboard = () => {
         end: res.endTime,
         className: res.status === 'PENDING' ? 'event-pending' : 'event-confirmed'
       }));
-  }, [reservations]);
+  }, [reservations, showPastReservations]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -113,6 +146,75 @@ const Dashboard = () => {
         ...formData,
         [name]: type === 'checkbox' ? checked : value
       });
+    }
+  };
+
+  const handleClientInputChange = (e) => {
+    const { name, value } = e.target;
+    setClientFormData({
+      ...clientFormData,
+      [name]: value
+    });
+    if (clientError) setClientError('');
+  };
+
+  const openClientModal = () => {
+    setShowClientModal(true);
+    setClientFormData({
+      fullName: '',
+      phone: '',
+      email: '',
+      cpf: ''
+    });
+    setClientError('');
+    setClientSuccess('');
+  };
+
+  const closeClientModal = () => {
+    if (savingClient) return;
+    setShowClientModal(false);
+    setClientFormData({
+      fullName: '',
+      phone: '',
+      email: '',
+      cpf: ''
+    });
+    setClientError('');
+    setClientSuccess('');
+  };
+
+  const handleSaveClient = async (e) => {
+    e.preventDefault();
+    setClientError('');
+    
+    if (!clientFormData.fullName || !clientFormData.phone) {
+      setClientError('Nome completo e telefone são obrigatórios');
+      return;
+    }
+
+    setSavingClient(true);
+
+    try {
+      const response = await clientService.create(clientFormData);
+      const newClient = response.data;
+      
+      setClients(prev => [...prev, newClient]);
+      setFormData(prev => ({
+        ...prev,
+        clientId: newClient.id
+      }));
+      
+      setClientSuccess('Cliente cadastrado com sucesso!');
+      
+      setTimeout(() => {
+        closeClientModal();
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Erro ao cadastrar cliente:', error);
+      setClientError(error.response?.data?.error || 'Erro ao cadastrar cliente. Tente novamente.');
+    } finally {
+      setSavingClient(false);
     }
   };
 
@@ -206,13 +308,22 @@ const Dashboard = () => {
       return;
     }
 
+    // Validar se o horário já passou PRIMEIRO
+    const dateTimeString = `${formData.date}T${finalTime}`;
+    const reservationDateTime = new Date(dateTimeString);
+    const now = new Date();
+
+    if (reservationDateTime <= now) {
+      setError('Não é possível criar reserva para um horário que já passou');
+      return;
+    }
+
     if (!formData.durationInHours || formData.durationInHours < 1) {
       setError('A duração deve ser de pelo menos 1 hora');
       return;
     }
 
     try {
-      const dateTimeString = `${formData.date}T${finalTime}`;
       const startDateTime = new Date(dateTimeString);
       const duration = parseFloat(formData.durationInHours);
       const endDateTime = addHours(startDateTime, duration);
@@ -315,7 +426,7 @@ const Dashboard = () => {
           <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/reservations')}>
             <div className="flex-between">
               <div>
-                <p className="text-muted text-sm">Reservas Ativas</p>
+                <p className="text-muted text-sm">Reservas Ativas (Próx 7 dias.)</p>
                 <h3 className="text-2xl font-bold">{stats?.reservations || 0}</h3>
               </div>
               <div style={{ 
@@ -375,47 +486,38 @@ const Dashboard = () => {
           </button>
           <button 
             className="btn btn-primary"
-            onClick={() => navigate('/courts')}
-            style={{ 
-              width: '100%',
-              padding: '0.75rem 1rem',
-              fontSize: '0.875rem'
-            }}
-          >
-            <MapPin size={16} />
-            Nova Quadra
-          </button>
-          <button 
-            className="btn btn-secondary"
             onClick={() => navigate('/tabs')}
             style={{ 
               width: '100%',
               padding: '0.75rem 1rem',
-              fontSize: '0.875rem'
+              fontSize: '0.875rem',
+              backgroundColor: '#8b5cf6'
             }}
           >
             <Receipt size={16} />
             Nova Comanda
           </button>
           <button 
-            className="btn btn-outline"
+            className="btn btn-primary"
             onClick={() => navigate('/products')}
             style={{ 
               width: '100%',
               padding: '0.75rem 1rem',
-              fontSize: '0.875rem'
+              fontSize: '0.875rem',
+              backgroundColor: '#10b981'
             }}
           >
             <Package size={16} />
-            Produtos
+            Estoque
           </button>
           <button 
-            className="btn btn-outline"
+            className="btn btn-primary"
             onClick={() => navigate('/clients')}
             style={{ 
               width: '100%',
               padding: '0.75rem 1rem',
-              fontSize: '0.875rem'
+              fontSize: '0.875rem',
+              backgroundColor: '#3b82f6'
             }}
           >
             <Users size={16} />
@@ -423,54 +525,70 @@ const Dashboard = () => {
           </button>
         </div>
 
-        <div className="card" style={{ padding: '2rem' }}>
-          <h2 className="font-bold text-xl" style={{ marginBottom: '1.5rem' }}>
-            <Clock size={24} style={{ display: 'inline', marginRight: '0.5rem', verticalAlign: 'middle' }} />
-            Calendário de Reservas
-          </h2>
-          
-          <div className="calendar-container">
-            <FullCalendar
-              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-              initialView="dayGridMonth"
-              headerToolbar={{
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        <div className="card">
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '1.5rem',
+            flexWrap: 'wrap',
+            gap: '1rem'
+          }}>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>
+              Calendário de Reservas
+            </h2>
+            <button
+              onClick={() => setShowPastReservations(!showPastReservations)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.625rem 1rem',
+                background: showPastReservations ? '#34a853' : '#e8eaed',
+                color: showPastReservations ? 'white' : '#5f6368',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
               }}
-              locale={ptBR}
-              events={calendarEvents}
-              dateClick={handleDateClick}
-              eventClick={handleEventClick}
-              
-              height="auto"
-              contentHeight="auto"
-              aspectRatio={1.5}
-              handleWindowResize={true}
-              windowResizeDelay={100}
-              
-              dayMaxEvents={3}
-              moreLinkClick="popover"
-              
-              buttonText={{
-                today: 'Hoje',
-                month: 'Mês',
-                week: 'Semana',
-                day: 'Dia'
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
               }}
-              allDayText="Dia todo"
-              noEventsText="Sem reservas"
-              
-              views={{
-                dayGridMonth: {
-                  dayMaxEvents: 2
-                },
-                timeGridWeek: {
-                  dayMaxEvents: 4
-                }
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
               }}
-            />
+            >
+              {showPastReservations ? <Eye size={16} /> : <EyeOff size={16} />}
+              {showPastReservations ? 'Ocultar Passadas' : 'Mostrar Passadas'}
+            </button>
           </div>
+          
+          <FullCalendar
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            headerToolbar={{
+              left: 'prev,next today',
+              center: 'title',
+              right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            }}
+            events={calendarEvents}
+            dateClick={handleDateClick}
+            eventClick={handleEventClick}
+            locale="pt-br"
+            height="auto"
+            slotMinTime="06:00:00"
+            slotMaxTime="23:30:00"
+            allDaySlot={false}
+            nowIndicator={true}
+            weekends={true}
+            editable={false}
+            selectable={true}
+          />
         </div>
       </div>
 
@@ -550,17 +668,7 @@ const Dashboard = () => {
 
             <div style={{ padding: '2rem', background: 'white' }}>
               {error && (
-                <div 
-                  className="alert alert-danger" 
-                  style={{ 
-                    marginBottom: '1.5rem',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem'
-                  }}
-                >
-                  <Info size={20} />
+                <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
                   {error}
                 </div>
               )}
@@ -569,7 +677,7 @@ const Dashboard = () => {
                 <div className="grid grid-2" style={{ gap: '1.5rem', marginBottom: '1.5rem' }}>
                   <div className="input-group" style={{ marginBottom: 0 }}>
                     <label 
-                      htmlFor="courtId" 
+                      htmlFor="courtId"
                       style={{ 
                         display: 'flex', 
                         alignItems: 'center', 
@@ -594,12 +702,13 @@ const Dashboard = () => {
                         border: '2px solid var(--border-color)',
                         fontSize: '1rem',
                         transition: 'all 0.2s',
-                        background: 'var(--bg-light)'
+                        background: 'var(--bg-light)',
+                        width: '100%'
                       }}
                       onFocus={(e) => e.target.style.borderColor = '#34a853'}
                       onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
                     >
-                      <option value="">Escolha uma quadra disponível</option>
+                      <option value="">Escolha a quadra</option>
                       {courts
                         .filter(court => court.status === 'AVAILABLE')
                         .map(court => (
@@ -625,30 +734,63 @@ const Dashboard = () => {
                       <Users size={18} style={{ color: '#34a853' }} />
                       Selecione o Cliente
                     </label>
-                    <select
-                      id="clientId"
-                      name="clientId"
-                      value={formData.clientId}
-                      onChange={handleInputChange}
-                      required
-                      style={{
-                        padding: '1rem',
-                        borderRadius: '12px',
-                        border: '2px solid var(--border-color)',
-                        fontSize: '1rem',
-                        transition: 'all 0.2s',
-                        background: 'var(--bg-light)'
-                      }}
-                      onFocus={(e) => e.target.style.borderColor = '#34a853'}
-                      onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                    >
-                      <option value="">Escolha um cliente da lista</option>
-                      {clients.map(client => (
-                        <option key={client.id} value={client.id}>
-                          {client.fullName}
-                        </option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <select
+                        id="clientId"
+                        name="clientId"
+                        value={formData.clientId}
+                        onChange={handleInputChange}
+                        required
+                        style={{
+                          flex: 1,
+                          padding: '1rem',
+                          borderRadius: '12px',
+                          border: '2px solid var(--border-color)',
+                          fontSize: '1rem',
+                          transition: 'all 0.2s',
+                          background: 'var(--bg-light)'
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = '#34a853'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                      >
+                        <option value="">Escolha um cliente da lista</option>
+                        {clients.map(client => (
+                          <option key={client.id} value={client.id}>
+                            {client.fullName}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={openClientModal}
+                        style={{
+                          padding: '0 1rem',
+                          borderRadius: '12px',
+                          border: '2px solid #34a853',
+                          background: 'white',
+                          color: '#34a853',
+                          fontSize: '0.875rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          whiteSpace: 'nowrap'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.background = '#34a853';
+                          e.target.style.color = 'white';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.background = 'white';
+                          e.target.style.color = '#34a853';
+                        }}
+                      >
+                        <UserPlus size={18} />
+                        Novo
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -682,7 +824,8 @@ const Dashboard = () => {
                         border: '2px solid var(--border-color)',
                         fontSize: '1rem',
                         transition: 'all 0.2s',
-                        background: 'var(--bg-light)'
+                        background: 'var(--bg-light)',
+                        width: '100%'
                       }}
                       onFocus={(e) => e.target.style.borderColor = '#34a853'}
                       onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
@@ -719,12 +862,13 @@ const Dashboard = () => {
                             border: '2px solid var(--border-color)',
                             fontSize: '1rem',
                             transition: 'all 0.2s',
-                            background: 'var(--bg-light)'
+                            background: 'var(--bg-light)',
+                            width: '100%'
                           }}
                           onFocus={(e) => e.target.style.borderColor = '#34a853'}
                           onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
                         >
-                          <option value="">Selecione o horário</option>
+                          <option value="">Horários disponíveis</option>
                           {roundTimeSlots.map(time => (
                             <option key={time} value={time}>
                               {time}
@@ -749,7 +893,7 @@ const Dashboard = () => {
                           }}
                         >
                           <Edit3 size={14} />
-                          Digitar horário personalizado
+                          Personalizar horário
                         </button>
                       </>
                     ) : (
@@ -770,7 +914,7 @@ const Dashboard = () => {
                             fontSize: '1rem',
                             transition: 'all 0.2s',
                             background: 'var(--bg-light)',
-                            cursor: 'text'
+                            width: '100%'
                           }}
                           onFocus={(e) => e.target.style.borderColor = '#34a853'}
                           onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
@@ -985,6 +1129,290 @@ const Dashboard = () => {
                   >
                     <Calendar size={20} />
                     Criar Reserva
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClientModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem'
+          }}
+          onClick={closeClientModal}
+        >
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              color: 'white',
+              padding: '2rem',
+              borderRadius: '16px 16px 0 0',
+              position: 'relative'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{
+                  width: '50px',
+                  height: '50px',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <UserPlus size={26} />
+                </div>
+                <div>
+                  <h2 style={{ marginBottom: '0.25rem', fontSize: '1.5rem', fontWeight: '700' }}>Cadastro Rápido</h2>
+                  <p style={{ opacity: 0.9, fontSize: '0.875rem', margin: 0 }}>Adicione um novo cliente</p>
+                </div>
+              </div>
+              <button 
+                onClick={closeClientModal}
+                disabled={savingClient}
+                style={{
+                  position: 'absolute',
+                  top: '1.5rem',
+                  right: '1.5rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: savingClient ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  color: 'white',
+                  opacity: savingClient ? 0.5 : 1
+                }}
+                onMouseEnter={(e) => !savingClient && (e.target.style.background = 'rgba(255, 255, 255, 0.3)')}
+                onMouseLeave={(e) => !savingClient && (e.target.style.background = 'rgba(255, 255, 255, 0.2)')}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '2rem', background: 'white' }}>
+              {clientError && (
+                <div style={{
+                  background: '#f8d7da',
+                  border: '1px solid #f5c6cb',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  marginBottom: '1.5rem',
+                  color: '#721c24',
+                  fontSize: '0.9rem'
+                }}>
+                  {clientError}
+                </div>
+              )}
+
+              {clientSuccess && (
+                <div style={{
+                  background: '#d4edda',
+                  border: '1px solid #c3e6cb',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  marginBottom: '1.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#155724',
+                  fontSize: '0.9rem'
+                }}>
+                  <CheckCircle size={20} />
+                  {clientSuccess}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveClient}>
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label htmlFor="fullName" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <User size={16} style={{ color: '#3b82f6' }} />
+                    Nome Completo *
+                  </label>
+                  <input
+                    type="text"
+                    id="fullName"
+                    name="fullName"
+                    value={clientFormData.fullName}
+                    onChange={handleClientInputChange}
+                    placeholder="Ex: João da Silva"
+                    required
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label htmlFor="phone" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Phone size={16} style={{ color: '#3b82f6' }} />
+                    Telefone *
+                  </label>
+                  <MaskedInput
+                    type="phone"
+                    id="phone"
+                    name="phone"
+                    value={clientFormData.phone}
+                    onChange={handleClientInputChange}
+                    placeholder="(XX) XXXXX-XXXX"
+                    required
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                  <label htmlFor="email" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Mail size={16} style={{ color: '#3b82f6' }} />
+                    Email (opcional)
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={clientFormData.email}
+                    onChange={handleClientInputChange}
+                    placeholder="email@exemplo.com"
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginBottom: '2rem' }}>
+                  <label htmlFor="cpf" style={{ fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <FileText size={16} style={{ color: '#3b82f6' }} />
+                    CPF (opcional)
+                  </label>
+                  <MaskedInput
+                    type="cpf"
+                    id="cpf"
+                    name="cpf"
+                    value={clientFormData.cpf}
+                    onChange={handleClientInputChange}
+                    placeholder="XXX.XXX.XXX-XX"
+                    disabled={savingClient}
+                    style={{
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      fontSize: '1rem',
+                      width: '100%',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    type="button" 
+                    onClick={closeClientModal}
+                    disabled={savingClient}
+                    style={{
+                      flex: 1,
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '2px solid var(--border-color)',
+                      background: 'white',
+                      color: '#5f6368',
+                      cursor: savingClient ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '1rem',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => !savingClient && (e.target.style.background = '#f1f3f4')}
+                    onMouseOut={(e) => !savingClient && (e.target.style.background = 'white')}
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={savingClient}
+                    style={{
+                      flex: 1,
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: 'none',
+                      background: '#3b82f6',
+                      color: 'white',
+                      cursor: savingClient ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      transition: 'all 0.2s',
+                      opacity: savingClient ? 0.7 : 1
+                    }}
+                    onMouseOver={(e) => !savingClient && (e.target.style.background = '#2563eb')}
+                    onMouseOut={(e) => !savingClient && (e.target.style.background = '#3b82f6')}
+                  >
+                    {savingClient ? (
+                      <>
+                        <div className="loading" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div>
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={20} />
+                        Salvar Cliente
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
