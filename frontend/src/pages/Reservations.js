@@ -18,7 +18,9 @@ import {
   UserPlus,
   Phone,
   Mail,
-  FileText
+  FileText,
+  DollarSign,
+  Users
 } from 'lucide-react';
 import { format, addHours, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -46,6 +48,15 @@ const Reservations = () => {
   const [clientError, setClientError] = useState('');
   const [clientSuccess, setClientSuccess] = useState('');
   const [savingClient, setSavingClient] = useState(false);
+  
+  // Estados para modal de pagamento
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentFormData, setPaymentFormData] = useState({
+    reservationId: '',
+    reservationData: null,
+    totalValue: '',
+    splitBetween: 1
+  });
   
   const [formData, setFormData] = useState({
     courtId: '',
@@ -184,6 +195,61 @@ const Reservations = () => {
     } finally {
       setSavingClient(false);
     }
+  };
+
+  // Funções do modal de pagamento
+  const openPaymentModal = (reservation) => {
+    const court = courts.find(c => c.id === reservation.courtId);
+    const courtPrice = court?.pricePerHour || 60;
+    const duration = reservation.durationInHours || 1;
+    const total = courtPrice * duration;
+    
+    setPaymentFormData({
+      reservationId: reservation.id,
+      reservationData: reservation,
+      totalValue: total.toFixed(2),
+      splitBetween: 1
+    });
+    setShowPaymentModal(true);
+  };
+
+  const closePaymentModal = () => {
+    setShowPaymentModal(false);
+    setPaymentFormData({
+      reservationId: '',
+      reservationData: null,
+      totalValue: '',
+      splitBetween: 1
+    });
+  };
+
+  const handlePaymentInputChange = (e) => {
+    const { name, value } = e.target;
+    setPaymentFormData({
+      ...paymentFormData,
+      [name]: value
+    });
+  };
+
+  const handleConfirmPayment = async () => {
+    try {
+      // Cancelar direto sem perguntar
+      await reservationService.cancel(paymentFormData.reservationId);
+      setSuccess('Pagamento confirmado! Reserva finalizada.');
+      closePaymentModal();
+      loadData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Erro ao confirmar pagamento:', error);
+      setError('Erro ao finalizar reserva');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  const calculatePerPerson = () => {
+    const total = parseFloat(paymentFormData.totalValue) || 0;
+    const split = parseInt(paymentFormData.splitBetween) || 1;
+    return (total / split).toFixed(2);
   };
 
   const validateTime = (time) => {
@@ -951,6 +1017,36 @@ const Reservations = () => {
                       </button>
                     )}
                     <button
+                      onClick={() => openPaymentModal(reservation)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.625rem 1rem',
+                        background: 'white',
+                        border: '2px solid #34a853',
+                        color: '#34a853',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        fontSize: '0.875rem',
+                        transition: 'all 0.2s',
+                        width: '100%'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.background = '#34a853';
+                        e.target.style.color = 'white';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.background = 'white';
+                        e.target.style.color = '#34a853';
+                      }}
+                    >
+                      <DollarSign size={16} />
+                      Finalizar Reserva
+                    </button>
+                    <button
                       onClick={() => handleCancel(reservation.id)}
                       style={{
                         display: 'flex',
@@ -1687,6 +1783,258 @@ const Reservations = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPaymentModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem'
+          }}
+          onClick={closePaymentModal}
+        >
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              background: 'linear-gradient(135deg, #34a853, #2d8e47)',
+              color: 'white',
+              padding: '2rem',
+              borderRadius: '16px 16px 0 0',
+              position: 'relative'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{
+                  width: '50px',
+                  height: '50px',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <DollarSign size={26} />
+                </div>
+                <div>
+                  <h2 style={{ marginBottom: '0.25rem', fontSize: '1.5rem', fontWeight: '700' }}>Finalizar Reserva</h2>
+                  <p style={{ opacity: 0.9, fontSize: '0.875rem', margin: 0 }}>Confirme o pagamento</p>
+                </div>
+              </div>
+              <button 
+                onClick={closePaymentModal}
+                style={{
+                  position: 'absolute',
+                  top: '1.5rem',
+                  right: '1.5rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  color: 'white'
+                }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.3)'}
+                onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.2)'}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '2rem' }}>
+              {paymentFormData.reservationData && (
+                <div style={{
+                  background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
+                  padding: '1.5rem',
+                  borderRadius: '12px',
+                  marginBottom: '1.5rem',
+                  border: '1px solid #bbf7d0'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: '#166534', fontWeight: '600' }}>
+                    <MapPin size={16} />
+                    Quadra: {courts.find(c => c.id === paymentFormData.reservationData.courtId)?.name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: '#166534', fontSize: '0.875rem' }}>
+                    <Clock size={16} />
+                    {format(parseISO(paymentFormData.reservationData.startTime), 'HH:mm')} - {format(parseISO(paymentFormData.reservationData.endTime), 'HH:mm')}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#166534', fontSize: '0.875rem' }}>
+                    <Calendar size={16} />
+                    Duração: {paymentFormData.reservationData.durationInHours}h
+                  </div>
+                </div>
+              )}
+
+              <div style={{
+                background: 'linear-gradient(135deg, #34a853, #2d8e47)',
+                padding: '2rem',
+                borderRadius: '16px',
+                textAlign: 'center',
+                marginBottom: '2rem',
+                color: 'white'
+              }}>
+                <div style={{ fontSize: '0.875rem', opacity: 0.9, marginBottom: '0.5rem' }}>
+                  Valor Total
+                </div>
+                <div style={{ fontSize: '2.5rem', fontWeight: '700' }}>
+                  R$ {paymentFormData.totalValue}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ fontWeight: '600', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <DollarSign size={16} style={{ color: '#34a853' }} />
+                  Valor da Reserva (editar se necessário)
+                </label>
+                <input
+                  type="number"
+                  name="totalValue"
+                  value={paymentFormData.totalValue}
+                  onChange={handlePaymentInputChange}
+                  onKeyPress={(e) => {
+                    if (e.key === ',') {
+                      e.preventDefault();
+                    }
+                  }}
+                  step="0.01"
+                  min="0"
+                  style={{
+                    padding: '1rem',
+                    borderRadius: '12px',
+                    border: '2px solid var(--border-color)',
+                    fontSize: '1.125rem',
+                    width: '100%',
+                    fontWeight: '600',
+                    transition: 'all 0.2s'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#34a853'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                />
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <label style={{ fontWeight: '600', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Users size={16} style={{ color: '#34a853' }} />
+                  Dividir entre quantos jogadores?
+                </label>
+                <input
+                  type="number"
+                  name="splitBetween"
+                  value={paymentFormData.splitBetween}
+                  onChange={handlePaymentInputChange}
+                  onKeyPress={(e) => {
+                    if (e.key === ',' || e.key === '.') {
+                      e.preventDefault();
+                    }
+                  }}
+                  min="1"
+                  max="20"
+                  style={{
+                    padding: '1rem',
+                    borderRadius: '12px',
+                    border: '2px solid var(--border-color)',
+                    fontSize: '1.125rem',
+                    width: '100%',
+                    fontWeight: '600',
+                    transition: 'all 0.2s'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#34a853'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                />
+              </div>
+
+              {paymentFormData.splitBetween > 1 && (
+                <div style={{
+                  background: '#f0f9ff',
+                  padding: '1.5rem',
+                  borderRadius: '12px',
+                  marginBottom: '2rem',
+                  textAlign: 'center',
+                  border: '1px solid #bae6fd'
+                }}>
+                  <div style={{ fontSize: '0.875rem', color: '#0369a1', marginBottom: '0.5rem' }}>
+                    Valor por pessoa
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#0369a1' }}>
+                    R$ {calculatePerPerson()}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#0369a1', marginTop: '0.5rem' }}>
+                    ({paymentFormData.splitBetween} jogadores)
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button 
+                  type="button" 
+                  onClick={closePaymentModal}
+                  style={{
+                    flex: 1,
+                    padding: '1rem',
+                    borderRadius: '12px',
+                    border: '2px solid var(--border-color)',
+                    background: 'white',
+                    color: '#5f6368',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '1rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.target.style.background = '#f1f3f4'}
+                  onMouseOut={(e) => e.target.style.background = 'white'}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleConfirmPayment}
+                  style={{
+                    flex: 1,
+                    padding: '1rem',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: '#34a853',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.target.style.background = '#2d8e47'}
+                  onMouseOut={(e) => e.target.style.background = '#34a853'}
+                >
+                  <CheckCircle size={20} />
+                  Confirmar Pagamento
+                </button>
+              </div>
             </div>
           </div>
         </div>
