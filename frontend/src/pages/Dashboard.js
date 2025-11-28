@@ -245,10 +245,15 @@ const Dashboard = () => {
       return `${yyyy}-${MM}-${dd}`;
     };
 
+    // Extrair horário do clique
+    const hours = clickedDate.getHours();
+    const minutes = clickedDate.getMinutes();
+    const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+
     setFormData({
       ...formData,
       date: formatDateForInput(clickedDate),
-      time: '18:00',
+      time: timeString,
       customTime: '',
       durationInHours: 1
     });
@@ -486,38 +491,47 @@ const Dashboard = () => {
           </button>
           <button 
             className="btn btn-primary"
+            onClick={() => navigate('/courts')}
+            style={{ 
+              width: '100%',
+              padding: '0.75rem 1rem',
+              fontSize: '0.875rem'
+            }}
+          >
+            <MapPin size={16} />
+            Nova Quadra
+          </button>
+          <button 
+            className="btn btn-secondary"
             onClick={() => navigate('/tabs')}
             style={{ 
               width: '100%',
               padding: '0.75rem 1rem',
-              fontSize: '0.875rem',
-              backgroundColor: '#8b5cf6'
+              fontSize: '0.875rem'
             }}
           >
             <Receipt size={16} />
             Nova Comanda
           </button>
           <button 
-            className="btn btn-primary"
+            className="btn btn-outline"
             onClick={() => navigate('/products')}
             style={{ 
               width: '100%',
               padding: '0.75rem 1rem',
-              fontSize: '0.875rem',
-              backgroundColor: '#10b981'
+              fontSize: '0.875rem'
             }}
           >
             <Package size={16} />
-            Estoque
+            Produtos
           </button>
           <button 
-            className="btn btn-primary"
+            className="btn btn-outline"
             onClick={() => navigate('/clients')}
             style={{ 
               width: '100%',
               padding: '0.75rem 1rem',
-              fontSize: '0.875rem',
-              backgroundColor: '#3b82f6'
+              fontSize: '0.875rem'
             }}
           >
             <Users size={16} />
@@ -570,7 +584,7 @@ const Dashboard = () => {
           
           <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
+            initialView="dayGridMonth"
             headerToolbar={{
               left: 'prev,next today',
               center: 'title',
@@ -583,6 +597,8 @@ const Dashboard = () => {
             height="auto"
             slotMinTime="06:00:00"
             slotMaxTime="23:30:00"
+            slotDuration="01:00:00"
+            slotLabelInterval="01:00:00"
             allDaySlot={false}
             nowIndicator={true}
             weekends={true}
