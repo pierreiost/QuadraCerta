@@ -7,6 +7,7 @@ const xss = require('xss-clean');
 const hpp = require('hpp');
 const rateLimit = require('express-rate-limit');
 const { PrismaClient } = require('@prisma/client');
+
 const userRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
 const courtRoutes = require('./routes/courts');
@@ -18,9 +19,10 @@ const dashboardRoutes = require('./routes/dashboard');
 const notificationRoutes = require('./routes/notifications');
 const permissionRoutes = require('./routes/permissions');
 const adminRoutes = require('./routes/admin');
+const courtTypesRoutes = require('./routes/courtTypes');
+
 const app = express();
 const prisma = new PrismaClient();
-const courtTypesRoutes = require('./routes/courtTypes');
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -37,7 +39,8 @@ app.use(helmet({
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://quadra-certa.vercel.app',
+  'https://quadracerta.site',
+  'https://www.quadracerta.site',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
@@ -48,6 +51,7 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.log(`❌ Origem bloqueada pelo CORS: ${origin}`);
       callback(new Error('Origem não permitida pelo CORS'));
     }
   },
@@ -60,9 +64,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(mongoSanitize());
-
 app.use(xss());
-
 app.use(hpp());
 
 const generalLimiter = rateLimit({
@@ -111,6 +113,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/court-types', courtTypesRoutes);
+
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -118,7 +122,6 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
-app.use('/api/court-types', courtTypesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Rota não encontrada' });
