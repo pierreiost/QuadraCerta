@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import MaskedInput from '../components/MaskedInput';
-import { reservationService, courtService, clientService } from '../services/api';
+import { reservationService, courtService, clientService, tabService } from '../services/api';
 import { 
   Trash2, 
   PlusCircle, 
@@ -37,7 +37,6 @@ const Reservations = () => {
   const [useCustomTime, setUseCustomTime] = useState(false);
   const [selectedReservations, setSelectedReservations] = useState([]);
   
-  // Estados para cadastro rápido de cliente
   const [showClientModal, setShowClientModal] = useState(false);
   const [clientFormData, setClientFormData] = useState({
     fullName: '',
@@ -49,7 +48,6 @@ const Reservations = () => {
   const [clientSuccess, setClientSuccess] = useState('');
   const [savingClient, setSavingClient] = useState(false);
   
-  // Estados para modal de pagamento
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentFormData, setPaymentFormData] = useState({
     reservationId: '',
@@ -197,20 +195,35 @@ const Reservations = () => {
     }
   };
 
-  // Funções do modal de pagamento
-  const openPaymentModal = (reservation) => {
-    const court = courts.find(c => c.id === reservation.courtId);
-    const courtPrice = court?.pricePerHour || 60;
-    const duration = reservation.durationInHours || 1;
-    const total = courtPrice * duration;
-    
-    setPaymentFormData({
-      reservationId: reservation.id,
-      reservationData: reservation,
-      totalValue: total.toFixed(2),
-      splitBetween: 1
-    });
-    setShowPaymentModal(true);
+  const openPaymentModal = async (reservation) => {
+    try {
+      const tabsResponse = await tabService.getAll();
+      const tabs = tabsResponse.data;
+      const openTab = tabs.find(t => t.reservationId === reservation.id && t.status === 'OPEN');
+      
+      if (openTab) {
+        setError('Esta reserva possui uma comanda aberta. Feche a comanda antes de finalizar a reserva.');
+        setTimeout(() => setError(''), 5000);
+        return;
+      }
+
+      const court = courts.find(c => c.id === reservation.courtId);
+      const courtPrice = court?.pricePerHour || 60;
+      const duration = reservation.durationInHours || 1;
+      const total = courtPrice * duration;
+      
+      setPaymentFormData({
+        reservationId: reservation.id,
+        reservationData: reservation,
+        totalValue: total.toFixed(2),
+        splitBetween: 1
+      });
+      setShowPaymentModal(true);
+    } catch (error) {
+      console.error('Erro ao verificar comandas:', error);
+      setError('Erro ao verificar comandas da reserva');
+      setTimeout(() => setError(''), 5000);
+    }
   };
 
   const closePaymentModal = () => {
@@ -233,7 +246,6 @@ const Reservations = () => {
 
   const handleConfirmPayment = async () => {
     try {
-      // Cancelar direto sem perguntar
       await reservationService.cancel(paymentFormData.reservationId);
       setSuccess('Pagamento confirmado! Reserva finalizada.');
       closePaymentModal();
@@ -241,7 +253,13 @@ const Reservations = () => {
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       console.error('Erro ao confirmar pagamento:', error);
-      setError('Erro ao finalizar reserva');
+      
+      if (error.response?.data?.error?.includes('comanda aberta')) {
+        setError('Esta reserva possui uma comanda aberta. Feche a comanda antes de finalizar.');
+      } else {
+        setError(error.response?.data?.error || 'Erro ao finalizar reserva');
+      }
+      
       setTimeout(() => setError(''), 5000);
     }
   };
@@ -299,7 +317,6 @@ const Reservations = () => {
       return;
     }
 
-    // Validar se o horário já passou
     const dateTimeString = `${formData.date}T${finalTime}`;
     const reservationDateTime = new Date(dateTimeString);
     const now = new Date();
@@ -358,7 +375,11 @@ const Reservations = () => {
       loadData();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.error || 'Erro ao cancelar reserva');
+      if (error.response?.data?.error?.includes('comanda aberta')) {
+        setError('Esta reserva possui uma comanda aberta. Feche a comanda antes de cancelar.');
+      } else {
+        setError(error.response?.data?.error || 'Erro ao cancelar reserva');
+      }
       setTimeout(() => setError(''), 5000);
     }
   };
