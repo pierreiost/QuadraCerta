@@ -417,7 +417,7 @@ const TabDetails = () => {
                 </div>
 
                 <div className="input-group">
-                  <label htmlFor="description">Descrição *</label>
+                  <label htmlFor="description">Descrição</label>
                   <input
                     type="text"
                     id="description"
@@ -426,6 +426,7 @@ const TabDetails = () => {
                     onChange={handleInputChange}
                     required
                     placeholder="Nome do produto ou serviço"
+                    readOnly
                   />
                 </div>
 
