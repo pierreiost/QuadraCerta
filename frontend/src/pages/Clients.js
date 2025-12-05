@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Users,
-  PlusCircle,
-  Edit2,
-  Trash2,
-  Phone,
-  Mail,
-  CreditCard,
+import Header from '../components/Header';
+import MaskedInput from '../components/MaskedInput';
+import { clientService } from '../services/api';
+import api from '../services/api';
+import { 
+  Users, 
+  Edit2, 
+  Trash2, 
+  PlusCircle, 
+  X, 
+  User, 
+  Phone, 
+  Mail, 
+  FileText,
   ChevronDown,
   ChevronUp,
   Calendar,
@@ -17,43 +23,51 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import Header from '../components/Header';
-import MaskedInput from '../components/MaskedInput';
-import { clientService } from '../services/api';
-import api from '../services/api';
 
 const Clients = () => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
-  const [expandedClient, setExpandedClient] = useState(null);
-  const [clientHistory, setClientHistory] = useState({});
-  const [loadingHistory, setLoadingHistory] = useState({});
-  const [historyPages, setHistoryPages] = useState({});
-
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
     email: '',
     cpf: ''
   });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Estados para o histórico
+  const [expandedClient, setExpandedClient] = useState(null);
+  const [clientHistory, setClientHistory] = useState({});
+  const [loadingHistory, setLoadingHistory] = useState({});
+  const [historyPages, setHistoryPages] = useState({});
 
   useEffect(() => {
     loadClients();
   }, []);
+
+  useEffect(() => {
+    if (showModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showModal]);
 
   const loadClients = async () => {
     try {
       const response = await clientService.getAll();
       setClients(response.data);
     } catch (error) {
+      console.error('Erro ao carregar clientes:', error);
       setError('Erro ao carregar clientes');
-      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -89,6 +103,23 @@ const Clients = () => {
     await loadClientHistory(clientId, newPage);
   };
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+    
+    if (fieldErrors[name]) {
+      setFieldErrors({
+        ...fieldErrors,
+        [name]: ''
+      });
+    }
+    
+    if (error) setError('');
+  };
+
   const openModal = (client = null) => {
     if (client) {
       setEditingClient(client);
@@ -112,22 +143,18 @@ const Clients = () => {
     setFieldErrors({});
   };
 
-  const closeModal = (forceClose = false) => {
-    if (!forceClose && isSaving) return;
-
-    if (!forceClose) {
-      const hasChanges =
-        formData.fullName !== (editingClient?.fullName || '') ||
-        formData.phone !== (editingClient?.phone || '') ||
-        formData.email !== (editingClient?.email || '') ||
-        formData.cpf !== (editingClient?.cpf || '');
-
-      if (hasChanges) {
-        const confirmClose = window.confirm('Você tem alterações não salvas. Deseja realmente sair? Dados não salvos serão perdidos.');
+  const closeModal = (skipConfirmation = false) => {
+    if (isSaving) return;
+    
+    if (!skipConfirmation) {
+      const hasData = formData.fullName || formData.phone || formData.email || formData.cpf;
+      
+      if (hasData) {
+        const confirmClose = window.confirm('Tem certeza? Dados não salvos serão perdidos.');
         if (!confirmClose) return;
       }
     }
-
+    
     setShowModal(false);
     setEditingClient(null);
     setFormData({
@@ -138,14 +165,6 @@ const Clients = () => {
     });
     setError('');
     setFieldErrors({});
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (fieldErrors[name]) {
-      setFieldErrors(prev => ({ ...prev, [name]: '' }));
-    }
   };
 
   const validateForm = () => {
@@ -179,7 +198,7 @@ const Clients = () => {
     }
 
     setFieldErrors(errors);
-
+    
     if (Object.keys(errors).length > 0) {
       setError('Por favor, corrija os erros antes de continuar');
       return false;
@@ -206,7 +225,7 @@ const Clients = () => {
         await clientService.create(formData);
         setSuccess('Cliente cadastrado com sucesso!');
       }
-
+      
       closeModal(true);
       loadClients();
       setTimeout(() => setSuccess(''), 3000);
@@ -257,7 +276,7 @@ const Clients = () => {
     <>
       <Header />
       <div className="container" style={{ marginTop: '2rem' }}>
-
+        
         <div className="flex-between" style={{ marginBottom: '2rem', alignItems: 'flex-start' }}>
           <div>
             <h1 className="font-bold text-2xl">Clientes</h1>
@@ -298,9 +317,9 @@ const Clients = () => {
             </button>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
             gap: '1.5rem'
           }}>
             {clients.map((client) => {
@@ -310,141 +329,128 @@ const Clients = () => {
               const currentPage = historyPages[client.id] || 1;
 
               return (
-                <div
+                <div 
                   key={client.id}
                   className="card"
                   style={{
                     padding: '0',
-                    border: '2px solid var(--border-color)',
-                    overflow: 'hidden',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.2s',
+                    border: '1px solid var(--border-color)',
+                    overflow: 'hidden'
                   }}
                 >
                   <div style={{ padding: '1.5rem' }}>
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: '1rem'
-                    }}>
+                    <div style={{ marginBottom: '1rem' }}>
                       <div style={{
                         width: '48px',
                         height: '48px',
                         borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #34a853, #2d8e47)',
+                        background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: 'white',
-                        fontSize: '1.25rem',
-                        fontWeight: '700'
+                        marginBottom: '1rem'
                       }}>
-                        {client.fullName.charAt(0).toUpperCase()}
+                        <User size={24} style={{ color: 'white' }} />
                       </div>
-
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button
-                          onClick={() => openModal(client)}
-                          style={{
-                            padding: '0.5rem',
-                            borderRadius: '8px',
-                            border: 'none',
-                            background: '#f3f4f6',
-                            color: '#6b7280',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#34a853';
-                            e.currentTarget.style.color = 'white';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#f3f4f6';
-                            e.currentTarget.style.color = '#6b7280';
-                          }}
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(client.id)}
-                          style={{
-                            padding: '0.5rem',
-                            borderRadius: '8px',
-                            border: 'none',
-                            background: '#f3f4f6',
-                            color: '#6b7280',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#ef4444';
-                            e.currentTarget.style.color = 'white';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#f3f4f6';
-                            e.currentTarget.style.color = '#6b7280';
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      
+                      <h3 className="font-bold" style={{ 
+                        fontSize: '1.125rem',
+                        marginBottom: '0.5rem',
+                        color: 'var(--text-primary)'
+                      }}>
+                        {client.fullName}
+                      </h3>
                     </div>
 
-                    <h3 className="font-bold" style={{
-                      fontSize: '1.125rem',
-                      marginBottom: '0.75rem',
-                      color: '#111827'
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '0.75rem',
+                      marginBottom: '1rem'
                     }}>
-                      {client.fullName}
-                    </h3>
-
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.5rem'
-                    }}>
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
                         gap: '0.5rem',
-                        color: '#6b7280',
-                        fontSize: '0.875rem'
+                        fontSize: '0.875rem',
+                        color: 'var(--text-secondary)'
                       }}>
                         <Phone size={16} />
                         <span>{client.phone}</span>
                       </div>
 
                       {client.email && (
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
                           gap: '0.5rem',
-                          color: '#6b7280',
-                          fontSize: '0.875rem'
+                          fontSize: '0.875rem',
+                          color: 'var(--text-secondary)'
                         }}>
                           <Mail size={16} />
-                          <span>{client.email}</span>
+                          <span style={{ 
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {client.email}
+                          </span>
                         </div>
                       )}
 
                       {client.cpf && (
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
                           gap: '0.5rem',
-                          color: '#6b7280',
-                          fontSize: '0.875rem'
+                          fontSize: '0.875rem',
+                          color: 'var(--text-secondary)'
                         }}>
-                          <CreditCard size={16} />
+                          <FileText size={16} />
                           <span>{client.cpf}</span>
                         </div>
                       )}
+                    </div>
+
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '0.5rem',
+                      paddingTop: '1rem',
+                      borderTop: '1px solid var(--border-color)'
+                    }}>
+                      <button
+                        className="btn btn-outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openModal(client);
+                        }}
+                        style={{ 
+                          flex: 1,
+                          padding: '0.5rem',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <Edit2 size={16} />
+                        Editar
+                      </button>
+                      <button
+                        className="btn btn-outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(client.id);
+                        }}
+                        style={{ 
+                          flex: 1,
+                          padding: '0.5rem',
+                          fontSize: '0.875rem',
+                          color: '#ef4444',
+                          borderColor: '#ef4444'
+                        }}
+                      >
+                        <Trash2 size={16} />
+                        Deletar
+                      </button>
                     </div>
                   </div>
 
@@ -454,9 +460,9 @@ const Clients = () => {
                       width: '100%',
                       padding: '1rem',
                       border: 'none',
-                      borderTop: '2px solid var(--border-color)',
+                      borderTop: '1px solid var(--border-color)',
                       background: isExpanded ? '#f9fafb' : 'white',
-                      color: '#34a853',
+                      color: '#3b82f6',
                       fontSize: '0.875rem',
                       fontWeight: '600',
                       cursor: 'pointer',
@@ -478,19 +484,19 @@ const Clients = () => {
                     <div style={{
                       padding: '1.5rem',
                       background: '#f9fafb',
-                      borderTop: '2px solid var(--border-color)',
+                      borderTop: '1px solid var(--border-color)',
                       animation: 'slideDown 0.3s ease'
                     }}>
                       {isLoadingHistory ? (
-                        <div style={{
-                          display: 'flex',
+                        <div style={{ 
+                          display: 'flex', 
                           justifyContent: 'center',
                           padding: '2rem'
                         }}>
-                          <div className="loading" style={{
-                            width: '30px',
-                            height: '30px',
-                            borderWidth: '3px'
+                          <div className="loading" style={{ 
+                            width: '30px', 
+                            height: '30px', 
+                            borderWidth: '3px' 
                           }}></div>
                         </div>
                       ) : history ? (
@@ -507,15 +513,15 @@ const Clients = () => {
                               borderRadius: '8px',
                               border: '1px solid #e5e7eb'
                             }}>
-                              <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
                                 gap: '0.5rem',
                                 marginBottom: '0.5rem'
                               }}>
-                                <Calendar size={18} color="#34a853" />
-                                <span style={{
-                                  fontSize: '0.75rem',
+                                <Calendar size={18} color="#3b82f6" />
+                                <span style={{ 
+                                  fontSize: '0.75rem', 
                                   color: '#6b7280',
                                   fontWeight: '600',
                                   textTransform: 'uppercase'
@@ -523,8 +529,8 @@ const Clients = () => {
                                   Total Reservas
                                 </span>
                               </div>
-                              <p style={{
-                                fontSize: '1.5rem',
+                              <p style={{ 
+                                fontSize: '1.5rem', 
                                 fontWeight: '700',
                                 color: '#111827',
                                 margin: 0
@@ -539,24 +545,24 @@ const Clients = () => {
                               borderRadius: '8px',
                               border: '1px solid #e5e7eb'
                             }}>
-                              <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
                                 gap: '0.5rem',
                                 marginBottom: '0.5rem'
                               }}>
-                                <DollarSign size={18} color="#34a853" />
-                                <span style={{
-                                  fontSize: '0.75rem',
+                                <DollarSign size={18} color="#3b82f6" />
+                                <span style={{ 
+                                  fontSize: '0.75rem', 
                                   color: '#6b7280',
                                   fontWeight: '600',
                                   textTransform: 'uppercase'
                                 }}>
-                                  GASTO EM COMANDAS
+                                  Gasto em Comandas
                                 </span>
                               </div>
-                              <p style={{
-                                fontSize: '1.5rem',
+                              <p style={{ 
+                                fontSize: '1.5rem', 
                                 fontWeight: '700',
                                 color: '#111827',
                                 margin: 0
@@ -577,10 +583,10 @@ const Clients = () => {
                                 alignItems: 'center',
                                 gap: '0.5rem'
                               }}>
-                                <TrendingUp size={16} color="#34a853" />
+                                <TrendingUp size={16} color="#3b82f6" />
                                 Próximas Reservas
                               </h4>
-                              <div style={{
+                              <div style={{ 
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '0.5rem'
@@ -599,7 +605,7 @@ const Clients = () => {
                                     }}
                                   >
                                     <div>
-                                      <p style={{
+                                      <p style={{ 
                                         fontWeight: '600',
                                         fontSize: '0.875rem',
                                         color: '#111827',
@@ -607,7 +613,7 @@ const Clients = () => {
                                       }}>
                                         {reservation.court.name}
                                       </p>
-                                      <p style={{
+                                      <p style={{ 
                                         fontSize: '0.75rem',
                                         color: '#6b7280',
                                         margin: 0,
@@ -620,7 +626,7 @@ const Clients = () => {
                                       display: 'flex',
                                       alignItems: 'center',
                                       gap: '0.25rem',
-                                      color: '#34a853',
+                                      color: '#3b82f6',
                                       fontSize: '0.75rem',
                                       fontWeight: '600'
                                     }}>
@@ -643,10 +649,10 @@ const Clients = () => {
                               alignItems: 'center',
                               gap: '0.5rem'
                             }}>
-                              <History size={16} color="#34a853" />
+                              <History size={16} color="#3b82f6" />
                               Histórico de Reservas
                             </h4>
-
+                            
                             {history.history.reservations.length === 0 ? (
                               <p style={{
                                 textAlign: 'center',
@@ -658,7 +664,7 @@ const Clients = () => {
                               </p>
                             ) : (
                               <>
-                                <div style={{
+                                <div style={{ 
                                   display: 'flex',
                                   flexDirection: 'column',
                                   gap: '0.5rem',
@@ -681,7 +687,7 @@ const Clients = () => {
                                         alignItems: 'center',
                                         marginBottom: '0.5rem'
                                       }}>
-                                        <p style={{
+                                        <p style={{ 
                                           fontWeight: '600',
                                           fontSize: '0.875rem',
                                           color: '#111827',
@@ -708,7 +714,7 @@ const Clients = () => {
                                         justifyContent: 'space-between',
                                         alignItems: 'center'
                                       }}>
-                                        <p style={{
+                                        <p style={{ 
                                           fontSize: '0.75rem',
                                           color: '#6b7280',
                                           margin: 0
@@ -790,130 +796,181 @@ const Clients = () => {
         )}
 
         {showModal && (
-          <div className="modal-overlay" onClick={() => closeModal()}>
-            <div
-              className="modal-content"
+          <div 
+            className="modal-overlay" 
+            onClick={() => closeModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '1rem'
+            }}
+          >
+            <div 
+              className="modal" 
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: '500px' }}
+              style={{
+                background: 'white',
+                borderRadius: '12px',
+                width: '100%',
+                maxWidth: '540px',
+                maxHeight: '90vh',
+                overflow: 'auto',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+              }}
             >
-              <div className="modal-header">
-                <h2>{editingClient ? 'Editar Cliente' : 'Novo Cliente'}</h2>
-                <button
-                  className="modal-close"
-                  onClick={() => closeModal()}
-                  disabled={isSaving}
+              <div 
+                className="modal-header"
+                style={{
+                  padding: '1.5rem',
+                  borderBottom: '1px solid #E5E7EB',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <h2 className="font-bold text-xl" style={{ margin: 0 }}>
+                  {editingClient ? 'Editar Cliente' : 'Novo Cliente'}
+                </h2>
+                <button 
+                  onClick={() => closeModal(false)} 
+                  className="btn-icon"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s'
+                  }}
                 >
-                  ×
+                  <X size={20} />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit}>
-                <div className="modal-body" style={{ padding: '1.5rem' }}>
-                  {error && (
-                    <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-                      {error}
-                    </div>
-                  )}
+              <div className="modal-body" style={{ padding: '1.5rem' }}>
+                {error && (
+                  <div 
+                    className="alert alert-danger" 
+                    style={{ marginBottom: '1.5rem' }}
+                  >
+                    {error}
+                  </div>
+                )}
 
-                  <div className="form-group">
-                    <label className="form-label">
-                      Nome Completo <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
+                <form onSubmit={handleSubmit}>
+                  <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                    <label htmlFor="fullName">Nome Completo *</label>
                     <input
                       type="text"
+                      id="fullName"
                       name="fullName"
                       value={formData.fullName}
                       onChange={handleInputChange}
-                      className={`form-input ${fieldErrors.fullName ? 'input-error' : ''}`}
-                      placeholder="Digite o nome completo"
-                      disabled={isSaving}
+                      required
+                      placeholder="João Silva Santos"
+                      style={{
+                        border: fieldErrors.fullName ? '2px solid #ef4444' : undefined
+                      }}
                     />
                     {fieldErrors.fullName && (
-                      <p className="error-message">{fieldErrors.fullName}</p>
+                      <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>
+                        {fieldErrors.fullName}
+                      </span>
                     )}
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">
-                      Telefone <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
+                  <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                    <label htmlFor="phone">Telefone *</label>
                     <MaskedInput
-                      mask="(99) 99999-9999"
+                      id="phone"
                       name="phone"
                       value={formData.phone}
                       onChange={handleInputChange}
-                      className={`form-input ${fieldErrors.phone ? 'input-error' : ''}`}
+                      mask="(99) 99999-9999"
                       placeholder="(00) 00000-0000"
-                      disabled={isSaving}
+                      required
+                      style={{
+                        border: fieldErrors.phone ? '2px solid #ef4444' : undefined
+                      }}
                     />
                     {fieldErrors.phone && (
-                      <p className="error-message">{fieldErrors.phone}</p>
+                      <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>
+                        {fieldErrors.phone}
+                      </span>
                     )}
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Email</label>
+                  <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                    <label htmlFor="email">Email</label>
                     <input
                       type="email"
+                      id="email"
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      className={`form-input ${fieldErrors.email ? 'input-error' : ''}`}
-                      placeholder="cliente@email.com"
-                      disabled={isSaving}
+                      placeholder="joao.silva@email.com"
+                      style={{
+                        border: fieldErrors.email ? '2px solid #ef4444' : undefined
+                      }}
                     />
                     {fieldErrors.email && (
-                      <p className="error-message">{fieldErrors.email}</p>
+                      <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>
+                        {fieldErrors.email}
+                      </span>
                     )}
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">CPF</label>
+                  <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                    <label htmlFor="cpf">CPF</label>
                     <MaskedInput
-                      mask="999.999.999-99"
+                      id="cpf"
                       name="cpf"
                       value={formData.cpf}
                       onChange={handleInputChange}
-                      className={`form-input ${fieldErrors.cpf ? 'input-error' : ''}`}
+                      mask="999.999.999-99"
                       placeholder="000.000.000-00"
-                      disabled={isSaving}
+                      style={{
+                        border: fieldErrors.cpf ? '2px solid #ef4444' : undefined
+                      }}
                     />
                     {fieldErrors.cpf && (
-                      <p className="error-message">{fieldErrors.cpf}</p>
+                      <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>
+                        {fieldErrors.cpf}
+                      </span>
                     )}
                   </div>
-                </div>
 
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    onClick={() => closeModal()}
-                    className="btn btn-secondary"
-                    disabled={isSaving}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <>
-                        <div className="loading" style={{
-                          width: '16px',
-                          height: '16px',
-                          borderWidth: '2px',
-                          marginRight: '0.5rem'
-                        }}></div>
-                        Salvando...
-                      </>
-                    ) : (
-                      editingClient ? 'Atualizar' : 'Cadastrar'
-                    )}
-                  </button>
-                </div>
-              </form>
+                  <div className="flex" style={{ gap: '1rem', justifyContent: 'flex-end' }}>
+                    <button 
+                      type="button" 
+                      onClick={() => closeModal(false)} 
+                      className="btn btn-outline"
+                      disabled={isSaving}
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary"
+                      disabled={isSaving}
+                    >
+                      {isSaving ? 'Salvando...' : (editingClient ? 'Atualizar' : 'Cadastrar')}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         )}

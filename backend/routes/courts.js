@@ -13,7 +13,7 @@ const validate = (req, res, next) => {
     return res.status(400).json({ 
       error: 'Dados inválidos',
       details: errors.array().map(err => ({
-        field: err.path,
+        field: err.path || err.param,
         message: err.msg
       }))
     });
@@ -21,7 +21,7 @@ const validate = (req, res, next) => {
   next();
 };
 
-// Listar quadras do complexo
+// Listar quadras
 router.get('/', authMiddleware, checkPermission('courts', 'view'), async (req, res) => {
   try {
     const courts = await prisma.court.findMany({
@@ -34,14 +34,14 @@ router.get('/', authMiddleware, checkPermission('courts', 'view'), async (req, r
 
     res.json(courts);
   } catch (error) {
-    console.error('Erro ao buscar quadras:', error);
-    res.status(500).json({ error: 'Erro ao buscar quadras' });
+    console.error('Erro ao listar quadras:', error);
+    res.status(500).json({ error: 'Erro ao listar quadras' });
   }
 });
 
 // Buscar quadra por ID
-router.get('/:id', 
-  authMiddleware, 
+router.get('/:id',
+  authMiddleware,
   checkPermission('courts', 'view'),
   [
     param('id').isUUID().withMessage('ID inválido'),
@@ -71,42 +71,38 @@ router.get('/:id',
   }
 );
 
-// Criar nova quadra
-router.post('/', 
-  authMiddleware, 
+// Criar quadra
+router.post('/',
+  authMiddleware,
   checkPermission('courts', 'create'),
   [
     body('name')
       .trim()
-      .notEmpty().withMessage('Nome da quadra é obrigatório')
+      .notEmpty().withMessage('Nome é obrigatório')
       .isLength({ min: 3, max: 100 }).withMessage('Nome deve ter entre 3 e 100 caracteres'),
-    
     body('courtTypeId')
-      .notEmpty().withMessage('Tipo de quadra é obrigatório')
       .isUUID().withMessage('Tipo de quadra inválido'),
-    
     body('pricePerHour')
-      .notEmpty().withMessage('Preço por hora é obrigatório')
-      .isFloat({ min: 0 }).withMessage('Preço deve ser um número positivo'),
-    
+      .isFloat({ min: 0 }).withMessage('Preço deve ser um valor positivo'),
     body('description')
       .optional()
       .trim()
       .isLength({ max: 500 }).withMessage('Descrição muito longa (máximo 500 caracteres)'),
-    
+    body('status')
+      .optional()
+      .isIn(['AVAILABLE', 'OCCUPIED', 'MAINTENANCE']).withMessage('Status inválido'),
     validate
   ],
   async (req, res) => {
     try {
-      const { name, courtTypeId, pricePerHour, description } = req.body;
+      const { name, courtTypeId, pricePerHour, description, status } = req.body;
 
-      // Verificar se o tipo de quadra existe e pertence ao complexo ou é padrão
       const courtType = await prisma.courtType.findFirst({
         where: {
           id: courtTypeId,
           OR: [
-            { isDefault: true },
-            { complexId: req.user.complexId }
+            { complexId: req.user.complexId },
+            { isDefault: true }
           ]
         }
       });
@@ -119,9 +115,9 @@ router.post('/',
         data: {
           name: name.trim(),
           courtTypeId,
-          capacity: 10, // Sempre 10
           pricePerHour: parseFloat(pricePerHour),
           description: description?.trim() || null,
+          status: status || 'AVAILABLE',
           complexId: req.user.complexId
         },
         include: {
@@ -132,13 +128,6 @@ router.post('/',
       res.status(201).json(court);
     } catch (error) {
       console.error('Erro ao criar quadra:', error);
-      
-      if (error.code === 'P2002') {
-        return res.status(409).json({ 
-          error: 'Já existe uma quadra com este nome' 
-        });
-      }
-
       res.status(500).json({ error: 'Erro ao criar quadra' });
     }
   }
@@ -150,30 +139,23 @@ router.put('/:id',
   checkPermission('courts', 'edit'),
   [
     param('id').isUUID().withMessage('ID inválido'),
-    
     body('name')
       .optional()
       .trim()
       .isLength({ min: 3, max: 100 }).withMessage('Nome deve ter entre 3 e 100 caracteres'),
-    
     body('courtTypeId')
       .optional()
       .isUUID().withMessage('Tipo de quadra inválido'),
-    
     body('pricePerHour')
       .optional()
-      .isFloat({ min: 0 }).withMessage('Preço deve ser um número positivo'),
-    
-    body('status')
-      .optional()
-      .isIn(['AVAILABLE', 'OCCUPIED', 'MAINTENANCE'])
-      .withMessage('Status inválido'),
-    
+      .isFloat({ min: 0 }).withMessage('Preço deve ser um valor positivo'),
     body('description')
       .optional()
       .trim()
       .isLength({ max: 500 }).withMessage('Descrição muito longa (máximo 500 caracteres)'),
-    
+    body('status')
+      .optional()
+      .isIn(['AVAILABLE', 'OCCUPIED', 'MAINTENANCE']).withMessage('Status inválido'),
     validate
   ],
   async (req, res) => {
@@ -191,14 +173,13 @@ router.put('/:id',
         return res.status(404).json({ error: 'Quadra não encontrada' });
       }
 
-      // Se estiver alterando o tipo, verificar se existe
       if (courtTypeId) {
         const courtType = await prisma.courtType.findFirst({
           where: {
             id: courtTypeId,
             OR: [
-              { isDefault: true },
-              { complexId: req.user.complexId }
+              { complexId: req.user.complexId },
+              { isDefault: true }
             ]
           }
         });
@@ -244,14 +225,6 @@ router.delete('/:id',
         where: {
           id: req.params.id,
           complexId: req.user.complexId
-        },
-        include: {
-          reservations: {
-            where: {
-              status: { not: 'CANCELLED' },
-              startTime: { gte: new Date() }
-            }
-          }
         }
       });
 
@@ -259,15 +232,67 @@ router.delete('/:id',
         return res.status(404).json({ error: 'Quadra não encontrada' });
       }
 
-      if (court.reservations.length > 0) {
+      const now = new Date();
+
+      // Verifica apenas reservas FUTURAS e ATIVAS
+      const activeReservations = await prisma.reservation.count({
+        where: {
+          courtId: req.params.id,
+          status: { not: 'CANCELLED' },
+          startTime: { gte: now }
+        }
+      });
+
+      if (activeReservations > 0) {
         return res.status(409).json({ 
           error: 'Não é possível deletar quadra com reservas futuras ativas',
-          activeReservations: court.reservations.length
+          activeReservations: activeReservations
         });
       }
 
-      await prisma.court.delete({
-        where: { id: req.params.id }
+      // Usa transação para deletar tudo na ordem correta
+      await prisma.$transaction(async (tx) => {
+        // 1. Busca todas as reservas da quadra
+        const reservations = await tx.reservation.findMany({
+          where: { courtId: req.params.id },
+          select: { id: true }
+        });
+
+        const reservationIds = reservations.map(r => r.id);
+
+        if (reservationIds.length > 0) {
+          // 2. Busca todas as comandas vinculadas às reservas
+          const tabs = await tx.tab.findMany({
+            where: { reservationId: { in: reservationIds } },
+            select: { id: true }
+          });
+
+          const tabIds = tabs.map(t => t.id);
+
+          // 3. Deleta items das comandas
+          if (tabIds.length > 0) {
+            await tx.tabItem.deleteMany({
+              where: { tabId: { in: tabIds } }
+            });
+          }
+
+          // 4. Deleta as comandas
+          if (tabIds.length > 0) {
+            await tx.tab.deleteMany({
+              where: { id: { in: tabIds } }
+            });
+          }
+
+          // 5. Deleta as reservas
+          await tx.reservation.deleteMany({
+            where: { courtId: req.params.id }
+          });
+        }
+
+        // 6. Finalmente deleta a quadra
+        await tx.court.delete({
+          where: { id: req.params.id }
+        });
       });
 
       res.json({ message: 'Quadra deletada com sucesso' });

@@ -213,6 +213,7 @@ router.delete('/:id', authMiddleware, checkPermission('clients', 'delete'), asyn
 
     const now = new Date();
 
+    // Verifica apenas reservas FUTURAS e ATIVAS
     const activeReservations = await prisma.reservation.count({
       where: {
         clientId: req.params.id,
@@ -223,11 +224,12 @@ router.delete('/:id', authMiddleware, checkPermission('clients', 'delete'), asyn
 
     if (activeReservations > 0) {
       return res.status(400).json({ 
-        error: 'Não é possível deletar cliente com reservas ativas. Cancele as reservas primeiro.',
+        error: 'Não é possível deletar cliente com reservas futuras ativas. Cancele as reservas primeiro.',
         activeReservations
       });
     }
 
+    // Verifica comandas abertas
     const openTabs = await prisma.tab.count({
       where: {
         clientId: req.params.id,
@@ -242,13 +244,42 @@ router.delete('/:id', authMiddleware, checkPermission('clients', 'delete'), asyn
       });
     }
 
-    await prisma.client.delete({
-      where: { id: req.params.id }
+    // Usa transação para deletar tudo na ordem correta
+    await prisma.$transaction(async (tx) => {
+      // 1. Busca todas as comandas do cliente
+      const tabs = await tx.tab.findMany({
+        where: { clientId: req.params.id },
+        select: { id: true }
+      });
+
+      const tabIds = tabs.map(t => t.id);
+
+      // 2. Deleta items das comandas
+      if (tabIds.length > 0) {
+        await tx.tabItem.deleteMany({
+          where: { tabId: { in: tabIds } }
+        });
+      }
+
+      // 3. Deleta as comandas
+      await tx.tab.deleteMany({
+        where: { clientId: req.params.id }
+      });
+
+      // 4. Deleta as reservas
+      await tx.reservation.deleteMany({
+        where: { clientId: req.params.id }
+      });
+
+      // 5. Finalmente deleta o cliente
+      await tx.client.delete({
+        where: { id: req.params.id }
+      });
     });
 
     res.json({ message: 'Cliente deletado com sucesso.' });
   } catch (error) {
-    console.error(error);
+    console.error('Erro ao deletar cliente:', error);
     res.status(500).json({ error: 'Erro ao deletar cliente.' });
   }
 });
